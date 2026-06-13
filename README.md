@@ -4,16 +4,75 @@ Repositorio del proyecto de desarrollo de software para la gestión centralizada
 
 ---
 
-## Etapa actual: Pre-SDLC — Planeación
+## Ciclo de Vida del Proyecto (SDLC)
 
-El proyecto se encuentra en la etapa previa al ciclo de vida de desarrollo (SDLC). En esta fase se recopila, estructura y valida la información de negocio necesaria para iniciar formalmente la planeación del proyecto mediante un **Project Initiation Document (PID)**.
+### Pre-SDLC — Recopilación de Información `[completado]`
 
-### Propósito de esta etapa
+Recopilación y estructuración de la información de negocio necesaria para iniciar el proyecto.
 
-- Capturar los requerimientos de alto nivel del cliente.
-- Estructurar la información del proyecto en un formato estándar.
-- Proveer la entrada necesaria para generar el PID.
-- Alinear a los stakeholders antes de iniciar el análisis de requerimientos.
+| Artefacto | Ruta |
+|-----------|------|
+| Formato de entrada PID | `requerimiento/input-plan-pid.md` |
+
+---
+
+### Etapa 1 — Planeación `[completado]`
+
+Definición del proyecto: alcance, objetivos, stakeholders, riesgos y viabilidad. Resultado formalizado en el Project Initiation Document (PID).
+
+| Artefacto | Ruta |
+|-----------|------|
+| Project Initiation Document (PID) | `docs/planning/PID-ControlStock.md` |
+
+---
+
+### Etapa 2 — Análisis de Requerimientos `[pendiente]`
+
+Levantamiento detallado de requerimientos funcionales y no funcionales. Generación del Software Requirements Specification (SRS).
+
+| Artefacto | Ruta |
+|-----------|------|
+| Software Requirements Specification (SRS) | `docs/requirements/SRS-ControlStock.md` |
+
+---
+
+### Etapa 3 — Pre-Diseño Estratégico `[pendiente]`
+
+Definición de la arquitectura de alto nivel, dominios de negocio y estrategia técnica del sistema.
+
+| Artefacto | Ruta |
+|-----------|------|
+| Strategic Design Document (SDD) | `docs/strategic-design/` |
+
+---
+
+### Etapa 4 — Diseño Técnico `[pendiente]`
+
+Diseño detallado de componentes, modelo de datos, APIs e integraciones.
+
+| Artefacto | Ruta |
+|-----------|------|
+| Technical Design Document | `docs/design/` |
+
+---
+
+### Etapa 5 — Implementación `[pendiente]`
+
+Desarrollo del sistema según el diseño aprobado. Plan de desarrollo e iteraciones.
+
+| Artefacto | Ruta |
+|-----------|------|
+| Plan de Desarrollo | `docs/development/` |
+
+---
+
+### Etapa 6 — Pruebas `[pendiente]`
+
+Verificación funcional, de carga, seguridad y aceptación del sistema.
+
+| Artefacto | Ruta |
+|-----------|------|
+| Plan de Pruebas | `docs/testing/` |
 
 ---
 
@@ -22,54 +81,15 @@ El proyecto se encuentra en la etapa previa al ciclo de vida de desarrollo (SDLC
 ```
 .
 ├── requerimiento/
-│   └── input-plan-pid.md       # Formato de entrada diligenciado para /plan-pid
+│   └── input-plan-pid.md           # Formato de entrada diligenciado para /plan-pid
+├── docs/
+│   └── planning/
+│       └── PID-ControlStock.md     # Project Initiation Document (PID)
 └── .claude/
     ├── formatos/
-    │   └── input-template.md   # Plantilla base del formato de entrada
+    │   └── input-template.md       # Plantilla base del formato de entrada
     └── skills/
-        └── plan-pid/           # Skill que genera el PID a partir del formato de entrada
-```
-
----
-
-## Artefactos generados
-
-| Artefacto | Ruta | Descripción |
-|-----------|------|-------------|
-| Formato de entrada PID | `requerimiento/input-plan-pid.md` | Información del cliente estructurada y lista para generar el PID |
-
----
-
-## Flujo SDLC planificado
-
-```
-Pre-SDLC (actual)
-    └── Recopilación de requerimientos del cliente
-    └── Diligenciamiento del formato de entrada → requerimiento/input-plan-pid.md
-
-Etapa 1 — Planeación
-    └── Generación del PID (/plan-pid)
-    └── Artefacto: docs/planning/PID-*.md
-
-Etapa 2 — Análisis de Requerimientos
-    └── Generación del SRS (/requirements-srs)
-    └── Artefacto: docs/requirements/SRS-*.md
-
-Etapa 3 — Pre-Diseño Estratégico
-    └── Generación del Strategic Design SDD (/strategic-design-sdd)
-    └── Artefacto: docs/strategic-design/
-
-Etapa 4 — Diseño Técnico
-    └── Generación del Technical Design SDD (/technical-design-sdd)
-    └── Artefacto: docs/design/
-
-Etapa 5 — Implementación
-    └── Generación del Plan de Desarrollo (/development-plan)
-    └── Artefacto: docs/development/
-
-Etapa 6 — Pruebas
-    └── Generación del Plan de Pruebas (/testing-plan)
-    └── Artefacto: docs/testing/
+        └── plan-pid/               # Skill que genera el PID a partir del formato de entrada
 ```
 
 ---
