@@ -1,0 +1,1679 @@
+openapi: 3.0.3
+info:
+  title: ControlStock API
+  version: 1.0.0
+  description: >
+    API REST de ControlStock — Sistema web centralizado de gestión de inventario Retail.
+    Todos los endpoints son validados por Kong API Gateway (JWT RS256, rate limiting 200 req/min).
+    Proyecto: ControlStock | Etapa: Diseño Técnico del SDLC.
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Desarrollo local (Kong NodePort 8000)
+  - url: http://{vps_ip}:8000/api/v1
+    description: Staging VPS
+    variables:
+      vps_ip:
+        default: "192.168.1.100"
+  - url: https://controlstock.example.com/api/v1
+    description: Producción OCI
+
+tags:
+  - name: Catalog
+    description: Gestión del catálogo maestro de productos y categorías (BC-02)
+  - name: Inventory
+    description: Control de stock, registro de movimientos y consulta de Kardex (BC-03)
+  - name: Adjustment
+    description: Ajustes de inventario con flujo de aprobación (BC-04)
+  - name: Alert
+    description: Consulta y gestión de alertas automáticas de stock (BC-05)
+  - name: Supplier
+    description: Gestión de proveedores y configuración de integración (BC-06)
+  - name: Reporting
+    description: Generación y descarga de reportes gerenciales (BC-07)
+  - name: Audit
+    description: Consulta del log de auditoría inmutable (BC-08)
+  - name: Integration
+    description: Gestión de integraciones externas y estado de sagas (BC-09)
+  - name: Saga Compensation
+    description: Endpoints de compensación idempotentes invocados por el orquestador de saga
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ─── BC-02: Catalog ────────────────────────────────────────
+  /catalog/categories:
+    get:
+      tags: [Catalog]
+      summary: Listar categorías
+      operationId: listCategories
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Lista de categorías
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedCategories'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Catalog]
+      summary: Crear categoría
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Categoría creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /catalog/categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Catalog]
+      summary: Obtener categoría por ID
+      operationId: getCategory
+      responses:
+        '200':
+          description: Categoría encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Catalog]
+      summary: Actualizar categoría
+      operationId: updateCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        '200':
+          description: Categoría actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /catalog/products:
+    get:
+      tags: [Catalog]
+      summary: Listar productos
+      operationId: listProducts
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: estado
+          in: query
+          schema:
+            $ref: '#/components/schemas/EstadoProducto'
+      responses:
+        '200':
+          description: Lista paginada de productos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedProducts'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Catalog]
+      summary: Crear producto
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /catalog/products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Catalog]
+      summary: Obtener producto por ID
+      operationId: getProduct
+      responses:
+        '200':
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Catalog]
+      summary: Actualizar producto
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Catalog]
+      summary: Inactivar producto
+      operationId: deactivateProduct
+      responses:
+        '200':
+          description: Producto inactivado
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ─── BC-03: Inventory ──────────────────────────────────────
+  /inventory/stock:
+    get:
+      tags: [Inventory]
+      summary: Listar stock actual de todos los productos
+      operationId: listStock
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: bajoMinimo
+          in: query
+          description: Filtrar solo productos con stock ≤ stock_mínimo
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Lista de niveles de stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedStockLevels'
+
+  /inventory/stock/{productId}:
+    get:
+      tags: [Inventory]
+      summary: Obtener stock actual de un producto
+      operationId: getStockByProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Nivel de stock del producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockLevel'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /inventory/movements:
+    get:
+      tags: [Inventory]
+      summary: Listar movimientos de inventario
+      operationId: listMovements
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: tipo
+          in: query
+          schema:
+            $ref: '#/components/schemas/TipoMovimiento'
+        - name: desde
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista paginada de movimientos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedMovements'
+    post:
+      tags: [Inventory]
+      summary: Registrar movimiento de inventario (entrada o salida)
+      operationId: createMovement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovementRequest'
+      responses:
+        '201':
+          description: Movimiento registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryMovement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Stock insuficiente o producto inactivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /inventory/movements/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Inventory]
+      summary: Obtener detalle de un movimiento
+      operationId: getMovement
+      responses:
+        '200':
+          description: Movimiento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryMovement'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /inventory/movements/{id}/anular:
+    post:
+      tags: [Inventory]
+      summary: Anular un movimiento registrado
+      operationId: cancelMovement
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Movimiento anulado (permanece visible en Kardex con estado ANULADO)
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /inventory/movements/{id}/compensar:
+    post:
+      tags: [Saga Compensation]
+      summary: Compensar entrada (revertir) — invocado por orquestador de Saga-01
+      operationId: compensarMovement
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompensacionRequest'
+      responses:
+        '200':
+          description: Compensación aplicada idempotentemente
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /inventory/kardex/{productId}:
+    get:
+      tags: [Inventory]
+      summary: Obtener Kardex de un producto (historial cronológico con saldo acumulado)
+      operationId: getKardex
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: desde
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Kardex del producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedKardex'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─── BC-04: Adjustment ─────────────────────────────────────
+  /adjustments:
+    get:
+      tags: [Adjustment]
+      summary: Listar solicitudes de ajuste
+      operationId: listAdjustments
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: estado
+          in: query
+          schema:
+            $ref: '#/components/schemas/EstadoAjuste'
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista paginada de ajustes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedAdjustments'
+    post:
+      tags: [Adjustment]
+      summary: Crear solicitud de ajuste de inventario
+      operationId: createAdjustment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdjustmentRequest'
+      responses:
+        '201':
+          description: Solicitud de ajuste creada en estado PENDIENTE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /adjustments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Adjustment]
+      summary: Obtener detalle de una solicitud de ajuste
+      operationId: getAdjustment
+      responses:
+        '200':
+          description: Solicitud de ajuste
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /adjustments/{id}/aprobar:
+    post:
+      tags: [Adjustment]
+      summary: Aprobar ajuste pendiente (requiere rol Supervisor o Administrador)
+      operationId: approveAdjustment
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Ajuste aprobado; actualización de stock iniciada (Saga-02)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ajuste ya procesado o en estado inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /adjustments/{id}/rechazar:
+    post:
+      tags: [Adjustment]
+      summary: Rechazar ajuste pendiente (requiere rol Supervisor o Administrador)
+      operationId: rejectAdjustment
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Ajuste rechazado; stock no modificado
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /adjustments/{id}/compensar:
+    post:
+      tags: [Saga Compensation]
+      summary: Compensar ajuste aprobado (revertir estado a ERROR) — invocado por orquestador Saga-02
+      operationId: compensarAdjustment
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompensacionRequest'
+      responses:
+        '200':
+          description: Compensación aplicada idempotentemente; estado ERROR registrado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─── BC-05: Alert ──────────────────────────────────────────
+  /alerts:
+    get:
+      tags: [Alert]
+      summary: Listar alertas de stock activas e históricas
+      operationId: listAlerts
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: tipo
+          in: query
+          schema:
+            $ref: '#/components/schemas/TipoAlerta'
+        - name: estado
+          in: query
+          schema:
+            $ref: '#/components/schemas/EstadoAlerta'
+        - name: productId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista paginada de alertas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedAlerts'
+
+  /alerts/{id}/reconocer:
+    post:
+      tags: [Alert]
+      summary: Reconocer una alerta activa
+      operationId: acknowledgeAlert
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Alerta reconocida
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─── BC-06: Supplier ───────────────────────────────────────
+  /suppliers:
+    get:
+      tags: [Supplier]
+      summary: Listar proveedores
+      operationId: listSuppliers
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: estado
+          in: query
+          schema:
+            $ref: '#/components/schemas/EstadoProveedor'
+      responses:
+        '200':
+          description: Lista paginada de proveedores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedSuppliers'
+    post:
+      tags: [Supplier]
+      summary: Registrar proveedor
+      operationId: createSupplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupplierRequest'
+      responses:
+        '201':
+          description: Proveedor registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /suppliers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Supplier]
+      summary: Obtener proveedor por ID
+      operationId: getSupplier
+      responses:
+        '200':
+          description: Proveedor encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Supplier]
+      summary: Actualizar proveedor
+      operationId: updateSupplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSupplierRequest'
+      responses:
+        '200':
+          description: Proveedor actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supplier'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Supplier]
+      summary: Inactivar proveedor
+      operationId: deactivateSupplier
+      responses:
+        '200':
+          description: Proveedor inactivado
+        '409':
+          description: Proveedor con movimientos asociados; solo puede inactivarse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── BC-07: Reporting ──────────────────────────────────────
+  /reports:
+    get:
+      tags: [Reporting]
+      summary: Listar solicitudes de reporte del usuario autenticado
+      operationId: listReports
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: estado
+          in: query
+          schema:
+            $ref: '#/components/schemas/EstadoReporte'
+      responses:
+        '200':
+          description: Lista paginada de solicitudes de reporte
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedReports'
+    post:
+      tags: [Reporting]
+      summary: Solicitar generación de reporte
+      operationId: createReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+      responses:
+        '202':
+          description: Solicitud aceptada; generación iniciada de forma asíncrona
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /reports/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Reporting]
+      summary: Consultar estado de una solicitud de reporte
+      operationId: getReport
+      responses:
+        '200':
+          description: Estado de la solicitud
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reports/{id}/download:
+    get:
+      tags: [Reporting]
+      summary: Descargar archivo de reporte generado
+      operationId: downloadReport
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Archivo del reporte
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Reporte no completado o fallido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ─── BC-08: Audit ──────────────────────────────────────────
+  /audit:
+    get:
+      tags: [Audit]
+      summary: Consultar log de auditoría (solo lectura — rol Auditor / Administrador)
+      operationId: listAuditRecords
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: entidad
+          in: query
+          schema:
+            type: string
+        - name: usuarioId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: desde
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Registros de auditoría paginados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedAuditRecords'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ─── BC-09: Integration ────────────────────────────────────
+  /integration/reposiciones:
+    post:
+      tags: [Integration]
+      summary: Iniciar solicitud de reposición a proveedor externo (dispara Saga-01)
+      operationId: iniciarReposicion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReposicionRequest'
+      responses:
+        '202':
+          description: Saga-01 iniciada; reposición en proceso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SagaInstance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Proveedor no encontrado o inactivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /integration/sagas:
+    get:
+      tags: [Integration]
+      summary: Listar instancias de saga activas e históricas
+      operationId: listSagas
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: sagaType
+          in: query
+          schema:
+            type: string
+            enum: [REPOSICION_INVENTARIO, AJUSTE_INVENTARIO]
+        - name: state
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de sagas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedSagas'
+
+  /integration/sagas/{sagaId}:
+    get:
+      tags: [Integration]
+      summary: Consultar estado de una saga
+      operationId: getSaga
+      parameters:
+        - name: sagaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Estado actual de la saga
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SagaInstance'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /integration/sagas/{sagaId}/ejecutar:
+    post:
+      tags: [Integration]
+      summary: Ejecutar/retomar una saga (API interna del orquestador — no expuesta externamente)
+      operationId: ejecutarSaga
+      parameters:
+        - name: sagaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SagaStepRequest'
+      responses:
+        '200':
+          description: Paso de saga ejecutado
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+# ─── Components ────────────────────────────────────────────────
+components:
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+    SizeParam:
+      name: size
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+  responses:
+    Unauthorized:
+      description: Token JWT ausente, inválido o expirado (HTTP 401)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Token válido sin permiso para la operación (HTTP 403)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado (HTTP 404)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Datos de entrada inválidos (HTTP 400)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflicto de estado o regla de negocio (HTTP 409)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+
+    # ── Catalog ──────────────────────────────────────────────
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        estado:
+          $ref: '#/components/schemas/EstadoGeneral'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCategoryRequest:
+      type: object
+      required: [codigo, nombre]
+      properties:
+        codigo:
+          type: string
+          maxLength: 20
+        nombre:
+          type: string
+          maxLength: 100
+        descripcion:
+          type: string
+          maxLength: 500
+
+    UpdateCategoryRequest:
+      type: object
+      properties:
+        nombre:
+          type: string
+          maxLength: 100
+        descripcion:
+          type: string
+          maxLength: 500
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        categoriaId:
+          type: string
+          format: uuid
+        stockMinimo:
+          type: number
+          format: double
+          minimum: 0
+        stockMaximo:
+          type: number
+          format: double
+          minimum: 0
+        estado:
+          $ref: '#/components/schemas/EstadoProducto'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProductRequest:
+      type: object
+      required: [codigo, nombre, categoriaId, stockMinimo, stockMaximo]
+      properties:
+        codigo:
+          type: string
+          maxLength: 50
+        nombre:
+          type: string
+          maxLength: 200
+        descripcion:
+          type: string
+          maxLength: 1000
+        categoriaId:
+          type: string
+          format: uuid
+        stockMinimo:
+          type: number
+          format: double
+          minimum: 0
+        stockMaximo:
+          type: number
+          format: double
+          minimum: 0
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        stockMinimo:
+          type: number
+          format: double
+          minimum: 0
+        stockMaximo:
+          type: number
+          format: double
+          minimum: 0
+        categoriaId:
+          type: string
+          format: uuid
+
+    # ── Inventory ─────────────────────────────────────────────
+    StockLevel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+          format: uuid
+        stockActual:
+          type: number
+          format: double
+        updatedAt:
+          type: string
+          format: date-time
+
+    InventoryMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+          format: uuid
+        tipo:
+          $ref: '#/components/schemas/TipoMovimiento'
+        cantidad:
+          type: number
+          format: double
+        referenciaDocumento:
+          type: string
+        fecha:
+          type: string
+          format: date
+        saldoResultante:
+          type: number
+          format: double
+        estado:
+          $ref: '#/components/schemas/EstadoMovimiento'
+        usuarioId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateMovementRequest:
+      type: object
+      required: [productoId, tipo, cantidad, referenciaDocumento, fecha]
+      properties:
+        productoId:
+          type: string
+          format: uuid
+        tipo:
+          $ref: '#/components/schemas/TipoMovimiento'
+        cantidad:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        referenciaDocumento:
+          type: string
+          maxLength: 100
+        fecha:
+          type: string
+          format: date
+
+    KardexEntry:
+      type: object
+      properties:
+        movimientoId:
+          type: string
+          format: uuid
+        tipo:
+          $ref: '#/components/schemas/TipoMovimiento'
+        cantidad:
+          type: number
+          format: double
+        saldoResultante:
+          type: number
+          format: double
+        referenciaDocumento:
+          type: string
+        fecha:
+          type: string
+          format: date
+        estado:
+          $ref: '#/components/schemas/EstadoMovimiento'
+        usuarioId:
+          type: string
+          format: uuid
+
+    # ── Adjustment ────────────────────────────────────────────
+    AdjustmentRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+          format: uuid
+        cantidad:
+          type: number
+          format: double
+        motivo:
+          type: string
+        estado:
+          $ref: '#/components/schemas/EstadoAjuste'
+        usuarioSolicitante:
+          type: string
+          format: uuid
+        decision:
+          $ref: '#/components/schemas/AdjustmentDecision'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateAdjustmentRequest:
+      type: object
+      required: [productoId, cantidad, motivo]
+      properties:
+        productoId:
+          type: string
+          format: uuid
+        cantidad:
+          type: number
+          format: double
+        motivo:
+          type: string
+          minLength: 10
+          maxLength: 500
+
+    AdjustmentDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [APROBADO, RECHAZADO]
+        comentario:
+          type: string
+        usuarioDecisor:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    DecisionRequest:
+      type: object
+      properties:
+        comentario:
+          type: string
+          maxLength: 500
+
+    CompensacionRequest:
+      type: object
+      required: [sagaId, motivo]
+      properties:
+        sagaId:
+          type: string
+          format: uuid
+        motivo:
+          type: string
+
+    # ── Alert ─────────────────────────────────────────────────
+    AlertEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+          format: uuid
+        tipoAlerta:
+          $ref: '#/components/schemas/TipoAlerta'
+        stockActual:
+          type: number
+          format: double
+        umbral:
+          type: number
+          format: double
+        estado:
+          $ref: '#/components/schemas/EstadoAlerta'
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Supplier ──────────────────────────────────────────────
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        identificacionFiscal:
+          type: string
+        metodoIntegracion:
+          type: string
+          enum: [REST, ARCHIVO]
+        estado:
+          $ref: '#/components/schemas/EstadoProveedor'
+        integrationConfig:
+          $ref: '#/components/schemas/IntegrationConfig'
+        createdAt:
+          type: string
+          format: date-time
+
+    IntegrationConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        protocolo:
+          type: string
+          enum: [REST, FTP, SFTP]
+        endpoint:
+          type: string
+        vaultSecretPath:
+          type: string
+          description: Ruta en Vault KV v2 donde residen las credenciales del proveedor
+
+    CreateSupplierRequest:
+      type: object
+      required: [nombre, identificacionFiscal, metodoIntegracion]
+      properties:
+        nombre:
+          type: string
+          maxLength: 200
+        identificacionFiscal:
+          type: string
+          maxLength: 50
+        metodoIntegracion:
+          type: string
+          enum: [REST, ARCHIVO]
+        integrationConfig:
+          $ref: '#/components/schemas/IntegrationConfig'
+
+    UpdateSupplierRequest:
+      type: object
+      properties:
+        nombre:
+          type: string
+        integrationConfig:
+          $ref: '#/components/schemas/IntegrationConfig'
+
+    # ── Reporting ─────────────────────────────────────────────
+    ReportRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        usuarioId:
+          type: string
+          format: uuid
+        reportType:
+          $ref: '#/components/schemas/ReportType'
+        parametros:
+          $ref: '#/components/schemas/ParametrosReporte'
+        formato:
+          $ref: '#/components/schemas/FormatoSalida'
+        estado:
+          $ref: '#/components/schemas/EstadoReporte'
+        archivoUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateReportRequest:
+      type: object
+      required: [reportType, formato]
+      properties:
+        reportType:
+          $ref: '#/components/schemas/ReportType'
+        formato:
+          $ref: '#/components/schemas/FormatoSalida'
+        parametros:
+          $ref: '#/components/schemas/ParametrosReporte'
+
+    ParametrosReporte:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+          nullable: true
+        productoId:
+          type: string
+          format: uuid
+          nullable: true
+        desde:
+          type: string
+          format: date
+          nullable: true
+        hasta:
+          type: string
+          format: date
+          nullable: true
+
+    # ── Audit ─────────────────────────────────────────────────
+    AuditRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        entidad:
+          type: string
+        entidadId:
+          type: string
+          format: uuid
+        operacion:
+          type: string
+          enum: [CREAR, MODIFICAR, INACTIVAR, MOVER, ANULAR]
+        usuarioId:
+          type: string
+          format: uuid
+        timestampUtc:
+          type: string
+          format: date-time
+        valorAnterior:
+          type: object
+          nullable: true
+        valorPosterior:
+          type: object
+          nullable: true
+
+    # ── Integration / Saga ────────────────────────────────────
+    ReposicionRequest:
+      type: object
+      required: [proveedorId, productoId, cantidadSolicitada]
+      properties:
+        proveedorId:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+          format: uuid
+        cantidadSolicitada:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+
+    SagaInstance:
+      type: object
+      properties:
+        sagaId:
+          type: string
+          format: uuid
+        sagaType:
+          type: string
+          enum: [REPOSICION_INVENTARIO, AJUSTE_INVENTARIO]
+        state:
+          type: string
+        currentStep:
+          type: integer
+        payload:
+          type: object
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SagaStepRequest:
+      type: object
+      required: [stepName, payload]
+      properties:
+        stepName:
+          type: string
+        payload:
+          type: object
+
+    # ── Paged responses ───────────────────────────────────────
+    PagedCategories:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/Category'
+
+    PagedProducts:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/Product'
+
+    PagedStockLevels:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/StockLevel'
+
+    PagedMovements:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/InventoryMovement'
+
+    PagedKardex:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/KardexEntry'
+
+    PagedAdjustments:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdjustmentRequest'
+
+    PagedAlerts:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/AlertEvent'
+
+    PagedSuppliers:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/Supplier'
+
+    PagedReports:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReportRequest'
+
+    PagedAuditRecords:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/AuditRecord'
+
+    PagedSagas:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/SagaInstance'
+
+    PageMetadata:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+
+    # ── Enumeraciones ─────────────────────────────────────────
+    EstadoGeneral:
+      type: string
+      enum: [ACTIVO, INACTIVO]
+
+    EstadoProducto:
+      type: string
+      enum: [ACTIVO, INACTIVO]
+
+    EstadoProveedor:
+      type: string
+      enum: [ACTIVO, INACTIVO]
+
+    TipoMovimiento:
+      type: string
+      enum: [ENTRADA, SALIDA, AJUSTE]
+
+    EstadoMovimiento:
+      type: string
+      enum: [ACTIVO, ANULADO]
+
+    EstadoAjuste:
+      type: string
+      enum: [PENDIENTE, APROBADO, RECHAZADO, ERROR]
+
+    TipoAlerta:
+      type: string
+      enum: [BAJO_STOCK, SOBRESTOCK]
+
+    EstadoAlerta:
+      type: string
+      enum: [ACTIVA, RECONOCIDA, RESUELTA]
+
+    ReportType:
+      type: string
+      enum:
+        - stock-actual
+        - movimientos-periodo
+        - kardex-producto
+        - stock-bajo-minimo
+        - proveedores-actividad
+        - auditoria-operaciones
+
+    FormatoSalida:
+      type: string
+      enum: [XLSX, CSV, PDF]
+
+    EstadoReporte:
+      type: string
+      enum: [SOLICITADO, PROCESANDO, COMPLETADO, FALLIDO]
+
+    # ── Error ─────────────────────────────────────────────────
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT RS256 emitido por Keycloak realm `controlstock`. Validado por Kong API Gateway
+        en cada petición antes de enrutar al microservicio destino.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >
+        Token de API independiente para sistemas externos consumidores (RF-020).
+        Gestionado por Kong; permisos controlados por RBAC del módulo IAM.

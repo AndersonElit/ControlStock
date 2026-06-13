@@ -1,0 +1,113 @@
+C4Container
+    title ControlStock — Diagrama de Contenedores (C4 Nivel 2)
+
+    Person(usuario, "Usuarios Internos", "Operador, Supervisor, Administrador, Gerente, Auditor")
+    Person_Ext(api_consumer, "Sistema Externo Consumer", "Consume la API pública con token de API independiente")
+
+    System_Boundary(cs, "ControlStock — K3s Cluster") {
+
+        Container(frontend, "frontend", "Next.js 14 / React 18 / TypeScript", "SPA web de gestión de inventario. Expuesto vía Traefik Ingress (namespace infra, puerto 443).")
+        Container(kong, "Kong API Gateway", "Kong 3.x", "Valida JWT RS256 contra Keycloak JWKS, aplica RBAC y rate limiting 200 req/min, gestiona CORS y enruta a microservicios internos. NodePort 8000.")
+
+        Container(iam_svc, "iam-service", "Spring Boot 3 / Java 21", "BC-01 IAM: Autenticación OIDC, gestión de usuarios, roles y RBAC granular. Proxy/adapter sobre Keycloak realm controlstock.")
+        Container(catalog_svc, "catalog-service", "Spring Boot 3 / Java 21 / R2DBC", "BC-02 Catalog: Catálogo maestro de productos y categorías. Emite eventos ProductoCreado / Actualizado / Inactivado vía Outbox.")
+        Container(inventory_svc, "inventory-service", "Spring Boot 3 / Java 21 / R2DBC", "BC-03 Inventory: Control de stock en tiempo real, registros de movimientos (Kardex) y materialización del read model MongoDB.")
+        Container(adjustment_svc, "adjustment-service", "Spring Boot 3 / Java 21 / R2DBC", "BC-04 Adjustment: Flujo de ajustes con aprobación supervisora obligatoria. Participante en Saga-02.")
+        Container(alert_svc, "alert-service", "Spring Boot 3 / Java 21 / R2DBC", "BC-05 Alert: Motor de alertas automáticas por umbrales de stock mínimo / máximo.")
+        Container(supplier_svc, "supplier-service", "Spring Boot 3 / Java 21 / R2DBC", "BC-06 Supplier: Gestión de proveedores y configuración de integración (referencias a secretos en Vault).")
+        Container(report_svc, "report-service", "Spring Boot 3 / Java 21 / R2DBC", "BC-07 Reporting: Ciclo de vida de ReportRequest. Dispara ETL vía Kafka. Provee acceso a archivos en MinIO.")
+        Container(audit_svc, "audit-service", "Spring Boot 3 / Java 21 / R2DBC", "BC-08 Audit: Registro inmutable append-only de todas las operaciones del sistema consumidas desde Kafka.")
+
+        Container(integration_svc, "integration-service", "Apache Camel 4.10.2 / Spring Boot 3 / Java 21", "BC-09 Integration: ACL centralizado para sistemas externos. Orquestador de Saga-01 (reposición) y Saga-02 (ajuste) mediante Camel Saga EIP + Narayana LRA. Único componente que se comunica con sistemas externos.")
+        Container(lra_coord, "Narayana LRA Coordinator", "Narayana 7.x", "Coordinador de Long Running Actions para sagas distribuidas. Namespace: infra. NodePort: 50000.")
+        Container(wiremock, "WireMock", "WireMock 3.x", "Mock de APIs de proveedores externos para pruebas de integración de rutas Camel. Namespace: infra. NodePort: 9999.")
+
+        Container(etl_job, "report-etl-service", "Apache Spark 3.5.1 / Scala 2.13 (CronJob K8s)", "ETL de reportería batch: extrae read model MongoDB (y audit_log vía JDBC) → valida esquema (Factory por ReportType) → genera .parquet en MinIO → publica evento ReporteParquetGenerado. No expone endpoints HTTP.")
+        Container(format_fn, "report-format-consumer", "OpenFaaS python3-http + Kafka Connector Helm", "Función serverless: convierte .parquet a XLSX/CSV/PDF y almacena archivo final en MinIO. Disparada por Kafka Connector al recibir ReporteParquetGenerado.")
+
+        Container(kafka, "Apache Kafka", "Strimzi KRaft", "Bus de eventos de dominio. Namespace: messaging. TLS con ACLs por productor/consumidor. Transactional Outbox relay desde cada servicio.")
+
+        ContainerDb(pg_iam, "controlstock_iam", "PostgreSQL 16", "Usuarios, roles, permisos, asignaciones de rol")
+        ContainerDb(pg_catalog, "controlstock_catalog", "PostgreSQL 16", "productos, categorias, outbox")
+        ContainerDb(pg_inventory, "controlstock_inventory", "PostgreSQL 16", "stock_levels, inventory_movements, outbox, processed_message")
+        ContainerDb(pg_adjustment, "controlstock_adjustment", "PostgreSQL 16", "adjustment_requests, adjustment_decisions, outbox, processed_message")
+        ContainerDb(pg_alert, "controlstock_alert", "PostgreSQL 16", "alert_rules, alert_events")
+        ContainerDb(pg_supplier, "controlstock_supplier", "PostgreSQL 16", "suppliers, integration_configs")
+        ContainerDb(pg_reporting, "controlstock_reporting", "PostgreSQL 16", "report_schema_catalog, report_requests, report_files")
+        ContainerDb(pg_audit, "controlstock_audit", "PostgreSQL 16", "audit_log (append-only, sin DELETE/UPDATE)")
+        ContainerDb(pg_integration, "controlstock_integration", "PostgreSQL 16", "integration_logs, notification_dispatch, saga_instance, saga_step_log, outbox, processed_message")
+        ContainerDb(mongodb, "controlstock_readmodel", "MongoDB 7", "Colecciones: kardex, stock, movimientos, productos, proveedores")
+        ContainerDb(minio, "MinIO / OCI Object Storage", "S3-compatible", "Archivos .parquet intermedios y XLSX/CSV/PDF finales de reportería")
+    }
+
+    System_Ext(keycloak, "Keycloak 24", "Identity Provider OIDC/OAuth 2.0. Realm: controlstock. Namespace: identity. NodePort: 8082.")
+    System_Ext(vault, "HashiCorp Vault", "Gestión de secretos KV v2 (controlstock/<env>/<svc>). Namespace: secrets. NodePort: 8200.")
+    System_Ext(notif_svc, "Servicio de Notificaciones", "Proveedor externo email/mensajería (SendGrid / SMTP relay)")
+    System_Ext(prov_ext, "Proveedores Externos", "APIs REST y servidores FTP/SFTP de proveedores de inventario")
+
+    %% --- Entry points ---
+    Rel(usuario, frontend, "Accede vía navegador", "HTTPS")
+    Rel(api_consumer, kong, "Llama API pública con token de API", "HTTPS/REST")
+    Rel(frontend, kong, "Peticiones autenticadas con JWT Bearer", "HTTPS/REST")
+
+    %% --- Kong routing ---
+    Rel(kong, iam_svc, "Enruta /auth/*", "HTTP interno K3s")
+    Rel(kong, catalog_svc, "Enruta /catalog/*", "HTTP interno K3s")
+    Rel(kong, inventory_svc, "Enruta /inventory/*", "HTTP interno K3s")
+    Rel(kong, adjustment_svc, "Enruta /adjustments/*", "HTTP interno K3s")
+    Rel(kong, alert_svc, "Enruta /alerts/*", "HTTP interno K3s")
+    Rel(kong, supplier_svc, "Enruta /suppliers/*", "HTTP interno K3s")
+    Rel(kong, report_svc, "Enruta /reports/*", "HTTP interno K3s")
+    Rel(kong, audit_svc, "Enruta /audit/*", "HTTP interno K3s")
+    Rel(kong, integration_svc, "Enruta /integration/* y API pública", "HTTP interno K3s")
+
+    %% --- Services to their databases (Database-per-Service) ---
+    Rel(iam_svc, pg_iam, "Lee / escribe", "R2DBC PostgreSQL")
+    Rel(catalog_svc, pg_catalog, "Lee / escribe", "R2DBC PostgreSQL")
+    Rel(inventory_svc, pg_inventory, "Lee / escribe", "R2DBC PostgreSQL")
+    Rel(adjustment_svc, pg_adjustment, "Lee / escribe", "R2DBC PostgreSQL")
+    Rel(alert_svc, pg_alert, "Lee / escribe", "R2DBC PostgreSQL")
+    Rel(supplier_svc, pg_supplier, "Lee / escribe", "R2DBC PostgreSQL")
+    Rel(report_svc, pg_reporting, "Lee / escribe", "R2DBC PostgreSQL")
+    Rel(audit_svc, pg_audit, "Escribe append-only", "R2DBC PostgreSQL")
+    Rel(integration_svc, pg_integration, "Lee / escribe", "R2DBC PostgreSQL")
+
+    %% --- CQRS projection to read model (cada servicio escribe su propia proyección) ---
+    Rel(inventory_svc, mongodb, "Proyecta kardex, stock, movimientos", "MongoDB Driver reactivo")
+    Rel(catalog_svc, mongodb, "Proyecta productos", "MongoDB Driver reactivo")
+    Rel(supplier_svc, mongodb, "Proyecta proveedores", "MongoDB Driver reactivo")
+
+    %% --- Kafka events (Transactional Outbox) ---
+    Rel(inventory_svc, kafka, "Publica EntradaRegistrada, SalidaRegistrada, StockActualizado", "Kafka Outbox relay")
+    Rel(adjustment_svc, kafka, "Publica AjusteSolicitado, AjusteAprobado, AjusteRechazado", "Kafka Outbox relay")
+    Rel(catalog_svc, kafka, "Publica ProductoCreado, Actualizado, Inactivado", "Kafka Outbox relay")
+    Rel(integration_svc, kafka, "Publica eventos de saga y notificación", "Kafka Outbox relay")
+    Rel(report_svc, kafka, "Publica solicitud de generación de reporte", "Kafka producer")
+
+    %% --- Kafka consumers ---
+    Rel(kafka, alert_svc, "Consume StockActualizado", "Kafka consumer")
+    Rel(kafka, audit_svc, "Consume todos los eventos de dominio", "Kafka consumer")
+    Rel(kafka, inventory_svc, "Consume AjusteAprobado (Saga-02)", "Kafka consumer")
+    Rel(kafka, etl_job, "Consume solicitud on-demand de reporte", "Kafka consumer")
+    Rel(kafka, format_fn, "Consume ReporteParquetGenerado", "OpenFaaS Kafka Connector")
+
+    %% --- Internal service-to-service REST ---
+    Rel(alert_svc, integration_svc, "Solicita envío de notificación de alerta", "REST interno K3s")
+
+    %% --- Reporting stack ---
+    Rel(etl_job, mongodb, "Extrae read model para reportes", "Spark MongoDB Connector")
+    Rel(etl_job, pg_audit, "Lee audit_log para reporte de auditoría", "Spark JDBC")
+    Rel(etl_job, pg_reporting, "Lee report_schema_catalog", "Spark JDBC")
+    Rel(etl_job, minio, "Escribe archivo .parquet", "S3 API")
+    Rel(etl_job, kafka, "Publica ReporteParquetGenerado", "Kafka producer")
+    Rel(format_fn, minio, "Lee .parquet, escribe XLSX/CSV/PDF final", "S3 API")
+
+    %% --- integration-service como ACL hacia sistemas externos ---
+    Rel(integration_svc, notif_svc, "Envía notificaciones de alerta (Camel http)", "HTTPS/REST o SMTP")
+    Rel(integration_svc, prov_ext, "Solicitudes de reposición (Camel http / file)", "HTTPS/REST o SFTP")
+    Rel(integration_svc, lra_coord, "Registra y coordina Long Running Actions", "HTTP/LRA protocol")
+
+    %% --- Keycloak and Vault ---
+    Rel(kong, keycloak, "Valida JWT RS256 vía JWKS endpoint", "HTTP/OIDC")
+    Rel(iam_svc, keycloak, "Gestiona identidades OIDC y sesiones", "HTTP/REST")
+    Rel(integration_svc, vault, "Lee credenciales de proveedores en runtime", "Vault KV v2 API")

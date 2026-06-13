@@ -60,13 +60,20 @@ El SDD se compone de tres documentos complementarios generados a partir del SRS 
 
 ---
 
-### Etapa 4 — Diseño Técnico `[pendiente]`
+### Etapa 4 — Diseño Técnico `[completado]`
 
-Diseño detallado de componentes, modelo de datos, APIs e integraciones.
+Diseño técnico completo del sistema a partir del Strategic Design. Define la arquitectura de microservicios hexagonales con CQRS event-driven, el stack tecnológico, los componentes por bounded context, las APIs REST, el modelo de datos polígota (PostgreSQL + MongoDB), los flujos de saga distribuida (Saga-01 reposición, Saga-02 ajuste), el diseño de seguridad técnica, la infraestructura K3s/Terraform y la matriz de trazabilidad ATDD. El conjunto de artefactos está listo como entrada para la etapa de Implementación.
 
 | Artefacto | Ruta |
 |-----------|------|
-| Technical Design Document | `docs/design/` |
+| SDD — Arquitectura del Sistema | `docs/design/SDD-ControlStock-system.md` |
+| SDD — Diseño Técnico | `docs/design/SDD-ControlStock-design.md` |
+| SDD — Infraestructura y Gobernanza | `docs/design/SDD-ControlStock-infrastructure.md` |
+| Diagrama C4 Nivel 1 — Contexto | `docs/design/diagrams/SDD-ControlStock-c4-context.mmd` |
+| Diagrama C4 Nivel 2 — Contenedores | `docs/design/diagrams/SDD-ControlStock-c4-container.mmd` |
+| Especificación OpenAPI 3.0.3 | `docs/design/api/SDD-ControlStock-openapi.yaml` |
+| Schema SQL — PostgreSQL (9 BDs) | `docs/design/database/SDD-ControlStock-schema.sql` |
+| Colecciones MongoDB — Read Model | `docs/design/database/SDD-ControlStock-collections.js` |
 
 ---
 
@@ -102,10 +109,22 @@ Verificación funcional, de carga, seguridad y aceptación del sistema.
 │   │   └── ADC-ControlStock.md          # Architectural Decision Context (ADC)
 │   ├── requirements/
 │   │   └── SRS-ControlStock.md          # Software Requirements Specification (SRS)
-│   └── strategic-design/
-│       ├── SDD-ControlStock-domain.md        # Strategic Design — Dominio y Comportamiento
-│       ├── SDD-ControlStock-security.md      # Strategic Design — Seguridad
-│       └── SDD-ControlStock-architecture.md  # Strategic Design — Estrategia Arquitectónica
+│   ├── strategic-design/
+│   │   ├── SDD-ControlStock-domain.md        # Strategic Design — Dominio y Comportamiento
+│   │   ├── SDD-ControlStock-security.md      # Strategic Design — Seguridad
+│   │   └── SDD-ControlStock-architecture.md  # Strategic Design — Estrategia Arquitectónica
+│   └── design/
+│       ├── SDD-ControlStock-system.md        # Technical Design — Arquitectura del Sistema
+│       ├── SDD-ControlStock-design.md        # Technical Design — Diseño Técnico
+│       ├── SDD-ControlStock-infrastructure.md # Technical Design — Infraestructura y Gobernanza
+│       ├── diagrams/
+│       │   ├── SDD-ControlStock-c4-context.mmd   # C4 Nivel 1 — Contexto (Mermaid)
+│       │   └── SDD-ControlStock-c4-container.mmd # C4 Nivel 2 — Contenedores (Mermaid)
+│       ├── api/
+│       │   └── SDD-ControlStock-openapi.yaml     # Especificación OpenAPI 3.0.3
+│       └── database/
+│           ├── SDD-ControlStock-schema.sql        # DDL PostgreSQL — 9 bounded contexts
+│           └── SDD-ControlStock-collections.js    # Colecciones MongoDB — Read Model CQRS
 └── .claude/
     ├── formatos/
     │   └── input-template.md       # Plantilla base del formato de entrada

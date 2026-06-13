@@ -1,0 +1,28 @@
+C4Context
+    title ControlStock — Diagrama de Contexto (C4 Nivel 1)
+
+    Person(operador, "Operador de Inventario", "Registra entradas, salidas y solicita ajustes de inventario")
+    Person(supervisor, "Supervisor de Inventario", "Aprueba ajustes y configura alertas de stock")
+    Person(admin, "Administrador", "Gestiona usuarios, catálogo maestro y proveedores")
+    Person(gerente, "Gerente / Analista", "Consulta dashboard de KPIs y genera reportes gerenciales")
+    Person(auditor, "Auditor", "Consulta el log de auditoría de operaciones del sistema")
+    Person_Ext(api_consumer, "Sistema Externo Consumer", "Consume la API pública de ControlStock (RF-020)")
+
+    System(controlstock, "ControlStock", "Sistema web centralizado de gestión de inventario Retail. Controla stock en tiempo real, trazabilidad de movimientos, alertas automáticas por umbral, integración con proveedores externos y reportería ejecutiva exportable.")
+
+    System_Ext(notif_svc, "Servicio de Notificaciones", "Proveedor externo de email / mensajería (SendGrid / SMTP relay) para envío de alertas de stock")
+    System_Ext(prov_rest, "API REST de Proveedor Externo", "API REST del proveedor de inventario para solicitudes de reposición de stock")
+    System_Ext(prov_ftp, "Servidor FTP/SFTP de Proveedor", "Servidor de archivos de proveedores sin capacidad de API REST")
+
+    Rel(operador, controlstock, "Registra movimientos de inventario", "HTTPS")
+    Rel(supervisor, controlstock, "Aprueba ajustes y consulta alertas activas", "HTTPS")
+    Rel(admin, controlstock, "Administra usuarios, catálogo y proveedores", "HTTPS")
+    Rel(gerente, controlstock, "Consulta KPIs y genera reportes exportables", "HTTPS")
+    Rel(auditor, controlstock, "Consulta bitácora de auditoría inmutable", "HTTPS")
+    Rel(api_consumer, controlstock, "Consulta stock y registra movimientos via API pública", "HTTPS/REST")
+
+    Rel(controlstock, notif_svc, "Envía notificaciones de alertas de stock", "HTTPS/REST o SMTP")
+    Rel(controlstock, prov_rest, "Envía solicitudes de reposición de inventario", "HTTPS/REST")
+    Rel(controlstock, prov_ftp, "Intercambia archivos de órdenes de reposición", "SFTP/FTP")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
