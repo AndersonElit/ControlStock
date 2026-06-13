@@ -8,7 +8,7 @@ Repositorio del proyecto de desarrollo de software para la gestión centralizada
 
 ### Pre-SDLC — Recopilación de Información `[completado]`
 
-Recopilación y estructuración de la información de negocio necesaria para iniciar el proyecto.
+Estructuración de la información de negocio necesaria para iniciar el proyecto. Se documentaron el contexto organizacional, los problemas operativos actuales y los objetivos de alto nivel que dieron origen a ControlStock.
 
 | Artefacto | Ruta |
 |-----------|------|
@@ -18,7 +18,7 @@ Recopilación y estructuración de la información de negocio necesaria para ini
 
 ### Etapa 1 — Planeación `[completado]`
 
-Definición del proyecto: alcance, objetivos, stakeholders, riesgos y viabilidad. Resultado formalizado en el Project Initiation Document (PID).
+Formalización del proyecto mediante el Project Initiation Document (PID). Se definieron el alcance, los objetivos medibles, los stakeholders, los riesgos iniciales, la viabilidad técnica y económica, el cronograma de alto nivel y la estimación de costos (USD 80.000 – 150.000).
 
 | Artefacto | Ruta |
 |-----------|------|
@@ -26,9 +26,9 @@ Definición del proyecto: alcance, objetivos, stakeholders, riesgos y viabilidad
 
 ---
 
-### Etapa 2 — Análisis de Requerimientos `[pendiente]`
+### Etapa 2 — Análisis de Requerimientos `[completado]`
 
-Levantamiento detallado de requerimientos funcionales y no funcionales. Generación del Software Requirements Specification (SRS).
+Especificación detallada del comportamiento esperado del sistema. El SRS documenta 20 requerimientos funcionales, 10 requerimientos no funcionales, 12 reglas de negocio, 8 casos de uso principales y criterios de aceptación verificables por requerimiento. Sirve como entrada directa para la etapa de diseño.
 
 | Artefacto | Ruta |
 |-----------|------|
@@ -83,8 +83,10 @@ Verificación funcional, de carga, seguridad y aceptación del sistema.
 ├── requerimiento/
 │   └── input-plan-pid.md           # Formato de entrada diligenciado para /plan-pid
 ├── docs/
-│   └── planning/
-│       └── PID-ControlStock.md     # Project Initiation Document (PID)
+│   ├── planning/
+│   │   └── PID-ControlStock.md     # Project Initiation Document (PID)
+│   └── requirements/
+│       └── SRS-ControlStock.md     # Software Requirements Specification (SRS)
 └── .claude/
     ├── formatos/
     │   └── input-template.md       # Plantilla base del formato de entrada
