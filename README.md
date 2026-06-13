@@ -36,9 +36,19 @@ Especificación detallada del comportamiento esperado del sistema. El SRS docume
 
 ---
 
-### Etapa 3 — Pre-Diseño Estratégico `[pendiente]`
+### Etapa 3 — Pre-Diseño Estratégico `[en progreso]`
 
-Definición de la arquitectura de alto nivel, dominios de negocio y estrategia técnica del sistema.
+Definición de la arquitectura de alto nivel, dominios de negocio y estrategia técnica del sistema. Antes de ejecutar el diseño estratégico se diligencia el ADC (Architectural Decision Context), que consolida el stack tecnológico mandatorio, los drivers arquitectónicos, los atributos de calidad y las restricciones organizacionales. El ADC sirve como entrada enriquecida para la skill `/strategic-design-sdd` junto al SRS.
+
+#### Paso previo — Architectural Decision Context (ADC) `[completado]`
+
+Documento que captura el contexto tecnológico, infraestructura, estilo arquitectónico preferido, SLAs, compliance, integraciones y restricciones organizacionales del proyecto. Entrada requerida por `/strategic-design-sdd` para enriquecer las decisiones estratégicas.
+
+| Artefacto | Ruta |
+|-----------|------|
+| Architectural Decision Context (ADC) | `docs/planning/ADC-ControlStock.md` |
+
+#### Diseño estratégico `[pendiente]`
 
 | Artefacto | Ruta |
 |-----------|------|
@@ -84,7 +94,8 @@ Verificación funcional, de carga, seguridad y aceptación del sistema.
 │   └── input-plan-pid.md           # Formato de entrada diligenciado para /plan-pid
 ├── docs/
 │   ├── planning/
-│   │   └── PID-ControlStock.md     # Project Initiation Document (PID)
+│   │   ├── PID-ControlStock.md     # Project Initiation Document (PID)
+│   │   └── ADC-ControlStock.md     # Architectural Decision Context (ADC) — entrada para /strategic-design-sdd
 │   └── requirements/
 │       └── SRS-ControlStock.md     # Software Requirements Specification (SRS)
 └── .claude/
