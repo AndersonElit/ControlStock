@@ -77,13 +77,40 @@ Diseño técnico completo del sistema a partir del Strategic Design. Define la a
 
 ---
 
-### Etapa 5 — Implementación `[pendiente]`
+### Etapa 5 — Implementación `[completado]`
 
-Desarrollo del sistema según el diseño aprobado. Plan de desarrollo e iteraciones.
+Plan de desarrollo detallado a partir del Diseño Técnico. Define el roadmap maestro de 6 fases (infraestructura, bases de datos, scaffolding + CI/CD, microservicios, frontend, pruebas) con backlog de tareas, criterios de aceptación técnicos, dependencias y estimaciones por componente. Cubre los 10 microservicios hexagonales con CQRS event-driven, los 10 módulos frontend, la capa de observabilidad y el pipeline de reporting serverless.
 
 | Artefacto | Ruta |
 |-----------|------|
-| Plan de Desarrollo | `docs/development/` |
+| Roadmap Maestro de Desarrollo | `docs/development/DEV-ControlStock-roadmap.md` |
+| Etapa 00 — Infraestructura (K3s / Terraform) | `docs/development/DEV-ControlStock-00-infrastructure.md` |
+| Etapa 01 — Bases de Datos (PostgreSQL + MongoDB) | `docs/development/DEV-ControlStock-01-databases.md` |
+| Etapa 02 — Scaffolding de Microservicios | `docs/development/DEV-ControlStock-02-scaffold.md` |
+| Etapa 02b — Pipeline CI/CD | `docs/development/DEV-ControlStock-02b-cicd.md` |
+| MS — IAM Service | `docs/development/DEV-ControlStock-03-ms-iam-service.md` |
+| MS — Catalog Service | `docs/development/DEV-ControlStock-03-ms-catalog-service.md` |
+| MS — Inventory Service | `docs/development/DEV-ControlStock-03-ms-inventory-service.md` |
+| MS — Adjustment Service | `docs/development/DEV-ControlStock-03-ms-adjustment-service.md` |
+| MS — Alert Service | `docs/development/DEV-ControlStock-03-ms-alert-service.md` |
+| MS — Supplier Service | `docs/development/DEV-ControlStock-03-ms-supplier-service.md` |
+| MS — Integration Service | `docs/development/DEV-ControlStock-03-ms-integration-service.md` |
+| MS — Report Service | `docs/development/DEV-ControlStock-03-ms-report-service.md` |
+| MS — Report ETL Service | `docs/development/DEV-ControlStock-03-ms-report-etl-service.md` |
+| MS — Audit Service | `docs/development/DEV-ControlStock-03-ms-audit-service.md` |
+| FE — Autenticación | `docs/development/DEV-ControlStock-04-fe-auth.md` |
+| FE — Dashboard Ejecutivo | `docs/development/DEV-ControlStock-04-fe-dashboard.md` |
+| FE — Catálogo de Productos | `docs/development/DEV-ControlStock-04-fe-catalogo.md` |
+| FE — Inventario y Kardex | `docs/development/DEV-ControlStock-04-fe-inventario.md` |
+| FE — Ajustes de Stock | `docs/development/DEV-ControlStock-04-fe-ajustes.md` |
+| FE — Alertas y Notificaciones | `docs/development/DEV-ControlStock-04-fe-alertas.md` |
+| FE — Gestión de Proveedores | `docs/development/DEV-ControlStock-04-fe-proveedores.md` |
+| FE — Reportes | `docs/development/DEV-ControlStock-04-fe-reportes.md` |
+| FE — Administración y Roles | `docs/development/DEV-ControlStock-04-fe-administracion.md` |
+| FE — Auditoría | `docs/development/DEV-ControlStock-04-fe-auditoria.md` |
+| Etapa 05 — Plan de Pruebas Integrado | `docs/development/DEV-ControlStock-05-tests.md` |
+| Etapa 06 — Reporting Serverless | `docs/development/DEV-ControlStock-06-reporting-serverless.md` |
+| Observabilidad (Prometheus / Grafana / Jaeger) | `docs/development/DEV-ControlStock-0c-observability.md` |
 
 ---
 
@@ -113,18 +140,29 @@ Verificación funcional, de carga, seguridad y aceptación del sistema.
 │   │   ├── SDD-ControlStock-domain.md        # Strategic Design — Dominio y Comportamiento
 │   │   ├── SDD-ControlStock-security.md      # Strategic Design — Seguridad
 │   │   └── SDD-ControlStock-architecture.md  # Strategic Design — Estrategia Arquitectónica
-│   └── design/
-│       ├── SDD-ControlStock-system.md        # Technical Design — Arquitectura del Sistema
-│       ├── SDD-ControlStock-design.md        # Technical Design — Diseño Técnico
-│       ├── SDD-ControlStock-infrastructure.md # Technical Design — Infraestructura y Gobernanza
-│       ├── diagrams/
-│       │   ├── SDD-ControlStock-c4-context.mmd   # C4 Nivel 1 — Contexto (Mermaid)
-│       │   └── SDD-ControlStock-c4-container.mmd # C4 Nivel 2 — Contenedores (Mermaid)
-│       ├── api/
-│       │   └── SDD-ControlStock-openapi.yaml     # Especificación OpenAPI 3.0.3
-│       └── database/
-│           ├── SDD-ControlStock-schema.sql        # DDL PostgreSQL — 9 bounded contexts
-│           └── SDD-ControlStock-collections.js    # Colecciones MongoDB — Read Model CQRS
+│   ├── design/
+│   │   ├── SDD-ControlStock-system.md        # Technical Design — Arquitectura del Sistema
+│   │   ├── SDD-ControlStock-design.md        # Technical Design — Diseño Técnico
+│   │   ├── SDD-ControlStock-infrastructure.md # Technical Design — Infraestructura y Gobernanza
+│   │   ├── diagrams/
+│   │   │   ├── SDD-ControlStock-c4-context.mmd   # C4 Nivel 1 — Contexto (Mermaid)
+│   │   │   └── SDD-ControlStock-c4-container.mmd # C4 Nivel 2 — Contenedores (Mermaid)
+│   │   ├── api/
+│   │   │   └── SDD-ControlStock-openapi.yaml     # Especificación OpenAPI 3.0.3
+│   │   └── database/
+│   │       ├── SDD-ControlStock-schema.sql        # DDL PostgreSQL — 9 bounded contexts
+│   │       └── SDD-ControlStock-collections.js    # Colecciones MongoDB — Read Model CQRS
+│   └── development/
+│       ├── DEV-ControlStock-roadmap.md            # Roadmap maestro de desarrollo (6 fases)
+│       ├── DEV-ControlStock-00-infrastructure.md  # Fase 00: Infraestructura K3s/Terraform
+│       ├── DEV-ControlStock-01-databases.md       # Fase 01: Bases de datos PostgreSQL + MongoDB
+│       ├── DEV-ControlStock-02-scaffold.md        # Fase 02: Scaffolding microservicios
+│       ├── DEV-ControlStock-02b-cicd.md           # Fase 02b: Pipeline CI/CD
+│       ├── DEV-ControlStock-03-ms-*.md            # Fase 03: 10 microservicios hexagonales
+│       ├── DEV-ControlStock-04-fe-*.md            # Fase 04: 10 módulos frontend
+│       ├── DEV-ControlStock-05-tests.md           # Fase 05: Plan de pruebas integrado
+│       ├── DEV-ControlStock-06-reporting-serverless.md # Fase 06: Reporting serverless
+│       └── DEV-ControlStock-0c-observability.md   # Observabilidad (Prometheus/Grafana/Jaeger)
 └── .claude/
     ├── formatos/
     │   └── input-template.md       # Plantilla base del formato de entrada
