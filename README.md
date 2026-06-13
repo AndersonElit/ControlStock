@@ -1,4 +1,4 @@
-# Sistema de Gestión de Inventario e Integración Comercial
+# ControlStock
 
 Repositorio del proyecto de desarrollo de software para la gestión centralizada de inventario en el dominio Retail / Logística.
 
@@ -78,7 +78,7 @@ Etapa 6 — Pruebas
 
 | Campo | Valor |
 |-------|-------|
-| Nombre | Sistema de Gestión de Inventario e Integración Comercial |
+| Nombre | ControlStock |
 | Tipo | Nuevo desarrollo |
 | Dominio | Retail / Gestión de Inventario y Logística |
 | Sponsor | Gerencia General |

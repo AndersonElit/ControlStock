@@ -12,7 +12,7 @@ Los campos marcados con `*` son obligatorios. El resto son opcionales; si los om
 
 ## Identificación del Proyecto *
 
-- **Nombre del proyecto:** Sistema de Gestión de Inventario e Integración Comercial
+- **Nombre del proyecto:** ControlStock
 - **Tipo de proyecto:** Nuevo desarrollo
 - **Dominio de negocio:** Retail / Gestión de Inventario y Logística
 - **Sponsor:** Gerencia General
