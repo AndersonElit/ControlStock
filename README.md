@@ -36,7 +36,7 @@ Especificación detallada del comportamiento esperado del sistema. El SRS docume
 
 ---
 
-### Etapa 3 — Pre-Diseño Estratégico `[en progreso]`
+### Etapa 3 — Pre-Diseño Estratégico `[completado]`
 
 Definición de la arquitectura de alto nivel, dominios de negocio y estrategia técnica del sistema. Antes de ejecutar el diseño estratégico se diligencia el ADC (Architectural Decision Context), que consolida el stack tecnológico mandatorio, los drivers arquitectónicos, los atributos de calidad y las restricciones organizacionales. El ADC sirve como entrada enriquecida para la skill `/strategic-design-sdd` junto al SRS.
 
@@ -48,11 +48,15 @@ Documento que captura el contexto tecnológico, infraestructura, estilo arquitec
 |-----------|------|
 | Architectural Decision Context (ADC) | `docs/planning/ADC-ControlStock.md` |
 
-#### Diseño estratégico `[pendiente]`
+#### Diseño estratégico `[completado]`
+
+El SDD se compone de tres documentos complementarios generados a partir del SRS y el ADC. Establece los bounded contexts, el lenguaje ubicuo, los eventos de dominio, los flujos de saga, el modelo de seguridad y las decisiones arquitectónicas estratégicas que servirán de entrada al Diseño Técnico.
 
 | Artefacto | Ruta |
 |-----------|------|
-| Strategic Design Document (SDD) | `docs/strategic-design/` |
+| SDD — Dominio y Comportamiento | `docs/strategic-design/SDD-ControlStock-domain.md` |
+| SDD — Seguridad | `docs/strategic-design/SDD-ControlStock-security.md` |
+| SDD — Estrategia Arquitectónica | `docs/strategic-design/SDD-ControlStock-architecture.md` |
 
 ---
 
@@ -94,10 +98,14 @@ Verificación funcional, de carga, seguridad y aceptación del sistema.
 │   └── input-plan-pid.md           # Formato de entrada diligenciado para /plan-pid
 ├── docs/
 │   ├── planning/
-│   │   ├── PID-ControlStock.md     # Project Initiation Document (PID)
-│   │   └── ADC-ControlStock.md     # Architectural Decision Context (ADC) — entrada para /strategic-design-sdd
-│   └── requirements/
-│       └── SRS-ControlStock.md     # Software Requirements Specification (SRS)
+│   │   ├── PID-ControlStock.md          # Project Initiation Document (PID)
+│   │   └── ADC-ControlStock.md          # Architectural Decision Context (ADC)
+│   ├── requirements/
+│   │   └── SRS-ControlStock.md          # Software Requirements Specification (SRS)
+│   └── strategic-design/
+│       ├── SDD-ControlStock-domain.md        # Strategic Design — Dominio y Comportamiento
+│       ├── SDD-ControlStock-security.md      # Strategic Design — Seguridad
+│       └── SDD-ControlStock-architecture.md  # Strategic Design — Estrategia Arquitectónica
 └── .claude/
     ├── formatos/
     │   └── input-template.md       # Plantilla base del formato de entrada
