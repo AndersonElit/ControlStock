@@ -1,0 +1,15 @@
+# image.repository / image.tag los fija el pipeline (bumpImageTag); ArgoCD los lee.
+image:
+  repository: ""
+  tag: ""
+replicaCount: 1
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+otel:
+  # Tempo recibe OTLP directamente (no hay OTEL Collector separado)
+  collectorEndpoint: "http://tempo.observability.svc.cluster.local:4317"

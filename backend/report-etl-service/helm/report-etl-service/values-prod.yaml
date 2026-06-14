@@ -1,0 +1,11 @@
+# image.repository / image.tag los fija el pipeline (bumpImageTag); ArgoCD los lee.
+image:
+  repository: ""
+  tag: ""
+resources:
+  requests:
+    cpu: "1"
+    memory: 4Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi

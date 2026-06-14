@@ -1,0 +1,31 @@
+# Valores base. En GitOps, image.repository/tag se fijan por ambiente en
+# values-<env>.yaml (los escribe el paso bumpImageTag de Jenkins y los lee ArgoCD).
+replicaCount: 1
+
+image:
+  repository: ""   # <registry>/<service> — definido en values-<env>.yaml
+  tag: ""          # <version>-<sha> inmutable — definido en values-<env>.yaml
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8086
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# Sondas contra los endpoints de Spring Boot Actuator.
+probes:
+  readinessPath: /actuator/health/readiness
+  livenessPath: /actuator/health/liveness
+
+# Observabilidad: endpoint del OTEL Collector. Se sobreescribe por ambiente en values-<env>.yaml.
+otel:
+  collectorEndpoint: ""
+
+env: []

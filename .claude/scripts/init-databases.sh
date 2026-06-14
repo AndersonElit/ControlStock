@@ -84,7 +84,7 @@ ssh_run() { ssh $SSH_OPTS "${SSH_USER}@${VM_IP}" "$@"; }
 
 # ─── slug: transforma "my-service" → "my_service" ────────────────────────────
 slugify() {
-  echo "$1" | tr '-' '_' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g'
+  echo "$1" | tr '-' '_' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g' | sed 's/_service$//'
 }
 
 # ─── resolver lista de servicios ──────────────────────────────────────────────
@@ -172,9 +172,14 @@ create_mongo_databases() {
   [[ -z "$mongo_pod" ]] && { warn "Pod MongoDB no encontrado — omitiendo BDs Mongo"; return; }
   info "Pod MongoDB: $mongo_pod"
 
+  # Solo catalog, inventory y supplier usan MongoDB
+  local mongo_svcs="catalog inventory supplier"
+
   for svc in "${services[@]}"; do
-    # Omitir servicios de soporte de Mongo (solo tienen PG)
-    [[ "$svc" =~ ^(keycloak|gitea|reporting)$ ]] && continue
+    local slug
+    slug=$(slugify "$svc")
+    # Omitir servicios que no usan MongoDB
+    [[ " $mongo_svcs " =~ " $slug " ]] || continue
 
     local slug db_name
     slug=$(slugify "$svc")

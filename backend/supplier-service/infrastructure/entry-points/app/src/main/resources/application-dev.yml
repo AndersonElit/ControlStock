@@ -1,0 +1,6 @@
+spring:
+  cloud:
+    vault:
+      # En dev apunta al Vault de K3s; exportar VAULT_TOKEN desde vault-init.json
+      uri: ${VAULT_ADDR:http://vault.secrets.svc.cluster.local:8200}
+      token: ${VAULT_TOKEN:dev-root-token}

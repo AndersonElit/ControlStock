@@ -1,0 +1,7 @@
+# image.repository / image.tag los fija el pipeline (bumpImageTag); ArgoCD los lee.
+image:
+  repository: ""
+  tag: ""
+replicaCount: 2
+otel:
+  collectorEndpoint: "http://tempo.observability.svc.cluster.local:4317"

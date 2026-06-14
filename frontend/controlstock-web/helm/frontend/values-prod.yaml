@@ -1,0 +1,12 @@
+# image.repository/tag los escribe bumpImageTag (Jenkins); ArgoCD los lee.
+image:
+  repository: ""
+  tag: ""
+replicaCount: 2
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi

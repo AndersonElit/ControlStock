@@ -1,0 +1,122 @@
+@Library('jenkins-shared-library@main') _
+
+// ───────────────────────────────────────────────────────────────────────────
+// Jenkinsfile (frontend Next.js) — build Docker + push Gitea Package Registry
+// + bumpImageTag → ArgoCD ApplicationSet despliega como pod K3s con Ingress Traefik.
+//
+// Modelo de agentes: Kubernetes plugin. Corre en un pod efímero en K3s nativo
+// en VPS (local QEMU en dev, Oracle Cloud OCI en prod) con contenedores 'node'
+// y 'kaniko' (definidos en org/controlstock/podFrontend.yaml de la Shared Library).
+// Imágenes publicadas en Gitea Package Registry (VPS_IP:3000/<org>).
+// ───────────────────────────────────────────────────────────────────────────
+
+pipeline {
+    agent {
+        kubernetes {
+            defaultContainer 'node'
+            yaml libraryResource('org/controlstock/podFrontend.yaml')
+        }
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    parameters {
+        string(
+            name: 'SERVICE_NAME',
+            defaultValue: 'frontend',
+            description: 'Nombre del repo frontend (deriva el repo en Gitea Package Registry).'
+        )
+        choice(
+            name: 'DEPLOY_ENV',
+            choices: ['dev', 'staging', 'prod'],
+            description: 'Ambiente destino del despliegue.'
+        )
+    }
+
+    environment {
+        SERVICE_NAME = "${params.SERVICE_NAME}"
+        DEPLOY_ENV   = "${params.DEPLOY_ENV}"
+        IMAGE_REPO   = "${params.SERVICE_NAME}"
+        K8S_NAMESPACE = "${params.DEPLOY_ENV}"
+    }
+
+    stages {
+        // 1 — Checkout + IMAGE_TAG inmutable.
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    def version = sh(script: "cat package.json | grep '"version"' | cut -d'"' -f4", returnStdout: true).trim()
+                    def sha = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${version}-${sha}"
+                    echo "IMAGE_TAG=${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        // 2 — Install.
+        stage('Install') { steps { sh 'npm ci' } }
+
+        // 3 — Type Check.
+        stage('Type Check') { steps { sh 'npm run type-check' } }
+
+        // 4 — Lint.
+        stage('Lint') { steps { sh 'npm run lint' } }
+
+        // 5 — Unit Tests (Vitest).
+        stage('Unit Tests') { steps { sh 'npm run test' } }
+
+        // 6 — Build Next.js (standalone para Docker).
+        stage('Build') {
+            steps { sh 'npm run build' }
+        }
+
+        // 7 — Imagen Docker multi-stage vía Kaniko → push a Gitea Package Registry.
+        stage('Build & Push Image') {
+            steps {
+                buildAndPushImage(
+                    service:   env.SERVICE_NAME,
+                    imageRepo: env.IMAGE_REPO,
+                    imageTag:  env.IMAGE_TAG
+                )
+            }
+        }
+
+        // 8 — Escaneo de imagen (Trivy). Falla ante CVE crítico.
+        stage('Image Scan (Trivy)') {
+            steps { scanImage(imageRepo: env.IMAGE_REPO, imageTag: env.IMAGE_TAG) }
+        }
+
+        // 9 — Frontera CI → CD: escribe image.repository/tag en
+        //     charts/frontend/values-<env>.yaml del repo <org>-helm-charts y commitea.
+        //     ArgoCD ApplicationSet (Git generator) detecta el commit y actualiza el pod K3s.
+        stage('Update GitOps (image tag)') {
+            steps {
+                bumpImageTag(
+                    service:  env.SERVICE_NAME,
+                    env:      env.DEPLOY_ENV,
+                    imageTag: env.IMAGE_TAG
+                )
+            }
+        }
+
+        // 10 — E2E (Playwright) contra la URL del pod K3s tras el sync de ArgoCD.
+        stage('E2E Tests') {
+            when { expression { params.DEPLOY_ENV != 'prod' } }
+            steps {
+                sh 'npx playwright install --with-deps'
+                sh "PLAYWRIGHT_TEST_BASE_URL=${K8S_FRONTEND_URL:-http://localhost:3000} npm run test:e2e"
+            }
+        }
+    }
+
+    post {
+        success { notify(status: 'SUCCESS', service: 'frontend', env: params.DEPLOY_ENV) }
+        failure { notify(status: 'FAILURE', service: 'frontend', env: params.DEPLOY_ENV) }
+    }
+}

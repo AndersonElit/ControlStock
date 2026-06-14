@@ -1,0 +1,24 @@
+[debug] Created transactional ClassFileManager with tempDir = /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/domain/model/target/scala-2.13/classes.bak
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] Created transactional ClassFileManager with tempDir = /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/domain/model/target/scala-2.13/classes.bak
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] Registering generated classes:
+[debug] 	ReportType$.class
+[debug] 	ReportFailed.class
+[debug] 	ReportParquetGenerated.class
+[debug] 	SourceDataPort.class
+[debug] 	ReportEvent.class
+[debug] 	EventBusPort.class
+[debug] 	ParquetStorePort.class
+[debug] 	ReportFailed$.class
+[debug] 	ReportType.class
+[debug] 	ColumnSpec$.class
+[debug] 	ReportParquetGenerated$.class
+[debug] 	IntegrityRule$.class
+[debug] 	ReportSchema$.class
+[debug] 	ColumnSpec.class
+[debug] 	ReportSchema.class
+[debug] 	IntegrityRule.class
+[debug] Removing the temporary directory used for backing up class files: /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/domain/model/target/scala-2.13/classes.bak

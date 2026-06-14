@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - changeSet:
+      id: 00001-report-schema-catalog
+      author: scaffold
+      comment: "Catálogo de esquemas de reportería para report-etl-service (DR-1)"
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE IF NOT EXISTS report_schema_catalog (
+                  report_type      VARCHAR(120) PRIMARY KEY,
+                  schema_version   VARCHAR(20)  NOT NULL,
+                  columns          JSONB        NOT NULL DEFAULT '[]',
+                  integrity_rules  JSONB        NOT NULL DEFAULT '[]',
+                  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+              );
+              COMMENT ON TABLE report_schema_catalog IS
+                  'Esquemas declarativos por tipo de reporte. MS1 los lee para validar el DataFrame extraido (DR-1).';
+            stripComments: false

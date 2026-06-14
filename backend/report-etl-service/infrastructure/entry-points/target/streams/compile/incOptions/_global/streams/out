@@ -1,0 +1,11 @@
+[debug] Created transactional ClassFileManager with tempDir = /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/infrastructure/entry-points/target/scala-2.13/classes.bak
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] Created transactional ClassFileManager with tempDir = /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/infrastructure/entry-points/target/scala-2.13/classes.bak
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] Registering generated classes:
+[debug] 	BatchMain.class
+[debug] 	BatchMain$$anonfun$1.class
+[debug] 	BatchMain$.class
+[debug] Removing the temporary directory used for backing up class files: /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/infrastructure/entry-points/target/scala-2.13/classes.bak

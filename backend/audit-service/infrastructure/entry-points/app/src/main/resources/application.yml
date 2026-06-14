@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: audit-service
+  config:
+    import: "optional:vault://controlstock/${APP_ENV:dev}/audit-service"
+  cloud:
+    vault:
+      uri: ${VAULT_ADDR:http://vault.secrets.svc.cluster.local:8200}
+      token: ${VAULT_TOKEN}
+      kv:
+        enabled: true
+        backend: secret
+  r2dbc:
+    url: ${R2DBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: '*'
+server:
+  port: ${SERVER_PORT:8088}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,readiness,liveness,prometheus,info,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${APP_ENV:dev}

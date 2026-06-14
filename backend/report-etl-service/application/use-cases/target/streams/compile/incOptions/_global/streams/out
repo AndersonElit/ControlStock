@@ -1,0 +1,13 @@
+[debug] Created transactional ClassFileManager with tempDir = /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/application/use-cases/target/scala-2.13/classes.bak
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] Created transactional ClassFileManager with tempDir = /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/application/use-cases/target/scala-2.13/classes.bak
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] Registering generated classes:
+[debug] 	ReportTransformerFactory.class
+[debug] 	ExtractReportUseCase$.class
+[debug] 	ReportTransformer.class
+[debug] 	UnsupportedReportTypeException.class
+[debug] 	ExtractReportUseCase.class
+[debug] Removing the temporary directory used for backing up class files: /home/anderson-elit/Documentos/ControlStock/backend/report-etl-service/application/use-cases/target/scala-2.13/classes.bak

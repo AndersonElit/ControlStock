@@ -1,0 +1,27 @@
+# Valores base. image.repository/tag se fijan por ambiente en values-<env>.yaml (GitOps).
+
+# Expresión cron que controla cuándo Kubernetes lanza el Job.
+# Formato: "minuto hora día-mes mes día-semana"  →  "0 * * * *" = cada hora en punto.
+schedule: "0 2 * * *"
+
+image:
+  repository: ""   # <registry>/<service> — definido en values-<env>.yaml
+  tag: ""          # <version>-<sha> inmutable — definido en values-<env>.yaml
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+# Never: el pod no se reinicia si falla (el Job reintenta según backoffLimit).
+restartPolicy: Never
+# Forbid: no lanza un nuevo Job si el anterior todavía está corriendo.
+concurrencyPolicy: Forbid
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 1
+
+env: []

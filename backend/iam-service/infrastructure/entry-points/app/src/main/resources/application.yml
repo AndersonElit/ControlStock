@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: iam-service
+  config:
+    import: "optional:vault://controlstock/${APP_ENV:dev}/iam-service"
+  cloud:
+    vault:
+      uri: ${VAULT_ADDR:http://vault.secrets.svc.cluster.local:8200}
+      token: ${VAULT_TOKEN}
+      kv:
+        enabled: true
+        backend: secret
+  r2dbc:
+    url: ${R2DBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+server:
+  port: ${SERVER_PORT:8081}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,readiness,liveness,prometheus,info,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${APP_ENV:dev}

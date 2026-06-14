@@ -1,0 +1,28 @@
+version: 1.0
+provider:
+  name: openfaas
+  # Gateway desplegado por helm-serverless en base-infrastructure-builder.sh
+  gateway: http://gateway.serverless.svc.cluster.local:8080
+
+functions:
+  report-format-consumer:
+    lang: python3-http
+    handler: ./
+    image: localhost:5000/controlstock/report-format-consumer:latest
+    # El Kafka Connector lee esta anotación para enrutar mensajes automáticamente
+    annotations:
+      topic: controlstock.reporting.parquet-generado
+    environment:
+      REPORT_BUCKET: controlstock-reports
+      STORAGE_ENDPOINT: http://minio.infra.svc.cluster.local:9000
+      KAFKA_BOOTSTRAP_SERVERS: kafka-kafka-bootstrap.messaging.svc.cluster.local:9092
+    # Secrets creados por kubernetes_secret en terraform/reporting/
+    secrets:
+      - report-minio-access-key
+      - report-minio-secret-key
+    limits:
+      memory: 512Mi
+      cpu: 500m
+    requests:
+      memory: 256Mi
+      cpu: 100m

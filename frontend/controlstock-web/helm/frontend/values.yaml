@@ -1,0 +1,30 @@
+replicaCount: 1
+
+image:
+  repository: ""   # <VPS_IP>:3000/<org>/frontend — definido en values-<env>.yaml
+  tag: ""          # <version>-<sha> inmutable — escrito por bumpImageTag (Jenkins)
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: gitea-registry-secret
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: true
+  className: traefik
+  host: ""
+  path: /
+  pathType: Prefix
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+env: []

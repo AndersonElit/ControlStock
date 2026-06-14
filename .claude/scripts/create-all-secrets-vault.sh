@@ -34,6 +34,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 log()    { echo "[$(date '+%H:%M:%S')] $*"; }
 log_ok() { echo "[$(date '+%H:%M:%S')] OK  $*"; }
 log_err(){ echo "[$(date '+%H:%M:%S')] ERR $*" >&2; }
@@ -72,15 +75,15 @@ done
 
 KUBECTL="kubectl --kubeconfig=$KUBECONFIG_PATH"
 
-slugify() { echo "$1" | tr '-' '_' | tr '[:upper:]' '[:lower:]'; }
+slugify() { echo "$1" | tr '-' '_' | tr '[:upper:]' '[:lower:]' | sed 's/_service$//'; }
 
 # ─── Leer Vault root token ────────────────────────────────────────────────────
 resolve_vault_token() {
   if [[ -n "$VAULT_TOKEN" ]]; then return; fi
 
-  if [[ -f "vault-init.json" ]]; then
-    VAULT_TOKEN=$(python3 -c "import json; print(json.load(open('vault-init.json'))['root_token'])" 2>/dev/null \
-      || jq -r '.root_token' vault-init.json 2>/dev/null || true)
+  if [[ -f "$REPO_ROOT/terraform/vault-init.json" ]]; then
+    VAULT_TOKEN=$(python3 -c "import json; print(json.load(open('$REPO_ROOT/terraform/vault-init.json'))['root_token'])" 2>/dev/null \
+      || jq -r '.root_token' "$REPO_ROOT/terraform/vault-init.json" 2>/dev/null || true)
   fi
 
   [[ -z "$VAULT_TOKEN" ]] && {
@@ -94,28 +97,31 @@ resolve_vault_token() {
 detect_db_type() {
   local svc_dir="$1"
   local db_type="none"
-  [[ -d "$svc_dir/driven-adapters/postgres" || \
-     -d "$svc_dir/driven-adapters/r2dbc-postgres" || \
-     -d "$svc_dir/driven-adapters/jpa-repository" ]] && db_type="postgres"
-  [[ -d "$svc_dir/driven-adapters/mongo" || \
-     -d "$svc_dir/driven-adapters/mongodb" || \
-     -d "$svc_dir/driven-adapters/reactive-mongo" ]] && db_type="mongo"
+  local infra_dir="$svc_dir/infrastructure/driven-adapters"
+  [[ -d "$infra_dir/postgres" || \
+     -d "$infra_dir/r2dbc-postgres" || \
+     -d "$infra_dir/jpa-repository" ]] && db_type="postgres"
+  [[ -d "$infra_dir/mongo" || \
+     -d "$infra_dir/mongodb" || \
+     -d "$infra_dir/reactive-mongo" ]] && db_type="mongo"
   echo "$db_type"
 }
 
 detect_kafka() {
   local svc_dir="$1"
-  [[ -d "$svc_dir/driven-adapters/kafka-producer" || \
-     -d "$svc_dir/driven-adapters/async-event-bus" || \
-     -d "$svc_dir/driven-adapters/outbox" || \
-     -d "$svc_dir/entry-points/kafka-consumer" || \
-     -d "$svc_dir/entry-points/async-event-handler" ]] && echo "true" || echo "false"
+  local infra_dir="$svc_dir/infrastructure"
+  [[ -d "$infra_dir/driven-adapters/kafka-producer" || \
+     -d "$infra_dir/driven-adapters/async-event-bus" || \
+     -d "$infra_dir/driven-adapters/outbox" || \
+     -d "$infra_dir/entry-points/kafka-consumer" || \
+     -d "$infra_dir/entry-points/async-event-handler" ]] && echo "true" || echo "false"
 }
 
 detect_integration_service() {
   local svc_dir="$1"
-  [[ -d "$svc_dir/driven-adapters/camel-rest-consumer" || \
-     -d "$svc_dir/driven-adapters/saga-camel" || \
+  local infra_dir="$svc_dir/infrastructure/driven-adapters"
+  [[ -d "$infra_dir/camel-rest-consumer" || \
+     -d "$infra_dir/saga-camel" || \
      $(basename "$svc_dir") == "integration-service" ]] && echo "true" || echo "false"
 }
 
@@ -123,7 +129,7 @@ detect_external_systems() {
   local svc_dir="$1"
   # Extrae nombres de sistemas externos de propiedades Camel
   grep -rh "external\.\(.*\)\.base-url\|camelContext.*from(" \
-    "$svc_dir" 2>/dev/null \
+    "$svc_dir/infrastructure" 2>/dev/null \
     | grep -oP 'external\.\K[a-z0-9-]+(?=\.base-url)' \
     | sort -u | tr '\n' ',' | sed 's/,$//' || true
 }

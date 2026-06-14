@@ -1,0 +1,7 @@
+kubeconfig_path              = "/etc/rancher/k3s/k3s.yaml"
+org                          = "controlstock"
+kafka_topic                  = "controlstock.reporting.parquet-generado"
+image_registry               = "localhost:5000"
+minio_access_key             = "minioadmin"
+minio_secret_key             = "changeme_minio"
+openfaas_basic_auth_password = "changeme_openfaas"
