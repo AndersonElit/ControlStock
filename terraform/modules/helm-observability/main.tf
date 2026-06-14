@@ -6,42 +6,95 @@ resource "helm_release" "kube_prometheus_stack" {
   namespace  = "observability"
   wait       = true
   timeout    = 600
-    set {
-    name = "prometheus.prometheusSpec.retention"
+  set {
+    name  = "prometheus.prometheusSpec.retention"
     value = "7d"
   }
-    set {
-    name = "prometheus.service.type"
+  set {
+    name  = "prometheus.service.type"
     value = "NodePort"
   }
-    set {
-    name = "prometheus.service.nodePort"
+  set {
+    name  = "prometheus.service.nodePort"
     value = "9090"
   }
-    set_sensitive {
-    name = "grafana.adminPassword"
+  set_sensitive {
+    name  = "grafana.adminPassword"
     value = var.grafana_admin_password
   }
-    set {
-    name = "grafana.service.type"
+  set {
+    name  = "grafana.service.type"
     value = "NodePort"
   }
-    set {
-    name = "grafana.service.nodePort"
+  set {
+    name  = "grafana.service.nodePort"
     value = "3001"
   }
-    set {
-    name = "grafana.persistence.enabled"
+  set {
+    name  = "grafana.persistence.enabled"
     value = "true"
   }
-    set {
-    name = "grafana.persistence.size"
+  set {
+    name  = "grafana.persistence.size"
     value = "2Gi"
   }
-    set {
+  set {
     name = "defaultRules.create"
     value = "true"
   }
+}
+  values = [<<-YAML
+    grafana:
+      additionalDataSources:
+        - name: Loki
+          type: loki
+          uid: loki
+          url: http://loki.observability.svc.cluster.local:3100
+          access: proxy
+          isDefault: false
+          editable: true
+        - name: Tempo
+          type: tempo
+          uid: tempo
+          url: http://tempo.observability.svc.cluster.local:3100
+          access: proxy
+          isDefault: false
+          editable: true
+          jsonData:
+            tracesToLogs:
+              datasourceUid: loki
+              filterByTraceID: true
+              filterBySpanID: false
+              lokiSearch: true
+    additionalPrometheusRulesMap:
+      controlstock-alerts:
+        groups:
+          - name: controlstock.http
+            rules:
+              - alert: HighErrorRate
+                expr: |
+                  sum(rate(http_server_requests_seconds_count{status=~"5..",application=~".*controlstock.*"}[5m]))
+                  /
+                  sum(rate(http_server_requests_seconds_count{application=~".*controlstock.*"}[5m])) > 0.05
+                for: 5m
+                labels:
+                  severity: critical
+                annotations:
+                  summary: "Tasa de error HTTP > 5% en {{ $labels.application }}"
+                  description: "La tasa de errores HTTP 5xx supera el umbral de 5% durante los ultimos 5 minutos."
+              - alert: HighP99Latency
+                expr: |
+                  histogram_quantile(0.99,
+                    sum(rate(http_server_requests_seconds_bucket{application=~".*controlstock.*"}[5m])) by (le, application)
+                  ) > 2
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Latencia P99 > 2s en {{ $labels.application }}"
+                  description: "El percentil 99 de latencia HTTP supera 2 segundos durante los ultimos 5 minutos."
+  YAML
+  ]
 }
 resource "helm_release" "loki" {
   count      = var.install_loki ? 1 : 0
@@ -89,8 +142,8 @@ resource "helm_release" "promtail" {
   namespace  = "observability"
   wait       = true
   timeout    = 180
-    set {
-    name = "config.lokiAddress"
+  set {
+    name  = "config.lokiAddress"
     value = "http://loki:3100/loki/api/v1/push"
   }
 }

@@ -1,12 +1,12 @@
 variable "grafana_admin_password" {
-  type = string
+  type      = string
   sensitive = true
 }
 variable "install_loki" {
-  type = bool
+  type    = bool
   default = true
 }
 variable "install_tempo" {
-  type = bool
+  type    = bool
   default = true
 }
