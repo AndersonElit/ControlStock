@@ -11,8 +11,9 @@
 7. [Paso 4 — Proveer Variables de Entorno y Credenciales al Controller (JCasC)](#paso-4--proveer-variables-de-entorno-y-credenciales-al-controller-jcasc)
 8. [Paso 5 — Crear los Jobs de Pipeline en Jenkins y los Webhooks de Gitea](#paso-5--crear-los-jobs-de-pipeline-en-jenkins-y-los-webhooks-de-gitea)
 9. [Paso 6 — Bootstrap de ArgoCD (ApplicationSet por Servicio)](#paso-6--bootstrap-de-argocd-applicationset-por-servicio)
-10. [Verificación del Pipeline Completo](#verificación-del-pipeline-completo)
-11. [Criterios de Aceptación](#criterios-de-aceptación)
+10. [Paso 6b — Pipeline de Migraciones de Base de Datos (Liquibase)](#paso-6b--pipeline-de-migraciones-de-base-de-datos-liquibase)
+11. [Verificación del Pipeline Completo](#verificación-del-pipeline-completo)
+12. [Criterios de Aceptación](#criterios-de-aceptación)
 
 ---
 
@@ -51,6 +52,8 @@ git push (dev branch)
   [K3s VPS — Namespace apps]
   (local: auto-sync; prod: manual sync)
 ```
+
+> **Migraciones de BD (carril paralelo).** Los cambios de esquema viven en el repo `controlstock-migrations` y los aplica un pipeline propio (Liquibase) **antes** del rollout — ver [Paso 6b](#paso-6b--pipeline-de-migraciones-de-base-de-datos-liquibase). No forman parte del build del servicio.
 
 ### Justificación de la configuración anticipada
 
@@ -149,13 +152,15 @@ Sección 3 → JCasC → Reiniciar Jenkins pod → Verificar pod Running en K3s
      │       (Auto-completa: SONAR_URL/TOKEN, GITOPS_CREDENTIALS, VAULT_TOKEN)
      ▼
 Sección 4 → Crear jobs Multibranch en Jenkins + Webhooks en Gitea
-     │
+     │       (incluye el job `controlstock-migrations` — webhook solo push, Paso 6b)
      ▼
 Sección 5 → Bootstrap ArgoCD (ApplicationSet + ApplicationProject)
      │
      ▼
 Sección 6 → Verificación integral del pipeline
 ```
+
+> **Nota — migración inicial.** El pipeline `controlstock-migrations` aplica los cambios de esquema **subsiguientes**. La carga inicial del esquema (primera vez) se hace fuera de banda con `.claude/scripts/run-liquibase-migrations.sh` (ver [Paso 6b](#paso-6b--pipeline-de-migraciones-de-base-de-datos-liquibase)); el script de CI/CD no la incluye porque depende de que las BDs (Etapa 1) ya existan.
 
 ### Auto-completado en ambiente local
 
@@ -203,13 +208,15 @@ jenkins-shared-library/
 │   ├── scanImage.groovy                  # Trivy CVE scan
 │   ├── bumpImageTag.groovy               # update helm/<svc>/values-<env>.yaml
 │   ├── runSmokeTests.groovy              # /actuator/health/readiness + /actuator/prometheus
+│   ├── runDatabaseMigration.groovy       # Liquibase update in-cluster (repo controlstock-migrations)
 │   └── notify.groovy                     # Slack (opcional en local, log fallback)
 ├── src/org/controlstock/
 │   └── PipelineDefaults.groovy
 ├── resources/org/controlstock/
 │   ├── podBackend.yaml                   # maven container + kaniko sidecar
 │   ├── podFrontend.yaml                  # node container
-│   └── podScalaBatch.yaml                # sbt container (sin dind)
+│   ├── podScalaBatch.yaml                # sbt container (sin dind)
+│   └── podMigrations.yaml                # liquibase container (migraciones de BD)
 ├── bootstrap/
 │   └── jenkins-agent-rbac.yaml
 └── docker/
@@ -232,6 +239,7 @@ jenkins-shared-library/
 | `scanImage.groovy` | `Scan Image` | Escanea la imagen publicada con Trivy buscando CVEs críticos y altos. Falla si encuentra CRITICAL. |
 | `bumpImageTag.groovy` | `Bump Image Tag` | Actualiza `helm/<service>/values-<env>.yaml` en el repositorio `controlstock-helm-charts` en Gitea con el nuevo tag de imagen. Hace commit y push. |
 | `runSmokeTests.groovy` | `Smoke Tests` | Verifica que el pod desplegado responde en `/actuator/health/readiness` y `/actuator/prometheus`. En local usa `SMOKE_USE_INCLUSTER=true`. |
+| `runDatabaseMigration.groovy` | `DB Migration` | Aplica los changelogs Liquibase de un servicio como `update` desde un container `liquibase` in-cluster, con `--searchPath` + `--changeLogFile=root.yaml` relativo. Lo usa el pipeline del repo `controlstock-migrations` (Paso 6b). Acepta `dbName` override (p.ej. `report-service`→`controlstock_reporting`). |
 | `notify.groovy` | `Notify` | Envía notificación al canal Slack configurado. **Si `SLACK_TEAM` está vacío (caso dev), registra el resultado en log y NO falla el build.** |
 
 ### Comportamiento del step `notify` en local
@@ -574,6 +582,9 @@ http://<VPS_IP>:8080/multibranch-webhook-trigger/invoke?token=iam-service
 | `integration-service` | `controlstock/integration-service` | `integration-service` |
 | `report-etl-service` | `controlstock/report-etl-service` | `report-etl-service` |
 | `controlstock-web` | `controlstock/controlstock-web` | `controlstock-web` |
+| `controlstock-migrations` | `controlstock/controlstock-migrations` | — (pipeline de migraciones, Paso 6b) |
+
+> El job `controlstock-migrations` es también un Multibranch Pipeline, pero usa el `Jenkinsfile` de migraciones (Paso 6b) en lugar del de build de servicio, y su webhook se dispara solo en `push`.
 
 ### Creación automática de jobs via Groovy Script (/scriptText)
 
@@ -773,6 +784,263 @@ kubectl describe application iam-service -n argocd \
 
 ---
 
+## Paso 6b — Pipeline de Migraciones de Base de Datos (Liquibase)
+
+Las migraciones de esquema **no se acoplan al build de cada microservicio**. Viven en el repositorio dedicado `controlstock-migrations` (un directorio `<servicio>/changelog/` por bounded context, con `root.yaml` + changelogs numerados `00001_*.yaml`). Los microservicios Spring Boot corren con `spring.liquibase.enabled=false`: el esquema se aplica desde fuera del JAR, **antes** de que ArgoCD despliegue la nueva versión de los pods. Esto garantiza trazabilidad por PR sobre el repo de migraciones y evita carreras esquema/aplicación.
+
+La **primera** aplicación de migraciones se hace manualmente con `.claude/scripts/run-liquibase-migrations.sh` (bootstrap, desde fuera del cluster). A partir de ahí, **cada push al repo `controlstock-migrations` dispara este pipeline**, que detecta qué servicios cambiaron y aplica únicamente sus changelogs.
+
+### Estrategia de disparo
+
+```
+  CÓDIGO DE SERVICIO                          MIGRACIONES DE BD
+  git push (dev) repo <svc>                   git push repo controlstock-migrations
+       │                                            │
+       ▼                                            ▼
+  [Gitea webhook]                             [Gitea webhook]
+       │                                            │
+       ▼                                            ▼
+  [Jenkins Multibranch: <svc>]                [Jenkins Multibranch: controlstock-migrations]
+       │                                            │
+  ┌────┴──────────────────────────┐           ┌────┴───────────────────────────────┐
+  │ build → tests → image → ...    │           │ detectChangedServices →            │
+  │ → bumpImageTag → smoke → notify│           │ runDatabaseMigration (Liquibase     │
+  └────┬──────────────────────────┘           │   update, container in-cluster) →   │
+       │ (git push helm-charts)                │ notify                              │
+       │                                       └────┬───────────────────────────────┘
+       ▼                                            │ (esquema actualizado en ns data)
+  [ArgoCD Git Generator] ◀── orden recomendado: migración antes del rollout ──┘
+       │
+       ▼
+  [K3s VPS — Namespace apps]
+```
+
+> **Orden esquema-antes-de-pods.** En `local`/`dev` (ArgoCD auto-sync) basta con que la migración corra primero porque las migraciones son aditivas y compatibles hacia atrás (expand-then-contract). Para `prod` se recomienda además el **hook PreSync de ArgoCD** (ver abajo), que hace el orden explícito y bloqueante.
+
+### Mapeo servicio → base de datos
+
+El pipeline deriva la BD destino como `controlstock_<slug>` (slug = nombre del servicio sin sufijo `-service`), con dos excepciones gestionadas por overrides:
+
+| Servicio (dir en repo) | Base de datos | Usuario | Nota |
+|---|---|---|---|
+| `iam-service` | `controlstock_iam` | `controlstock_iam_user` | + seed de 7 roles (`00002_seed_roles.yaml`) |
+| `catalog-service` | `controlstock_catalog` | `controlstock_catalog_user` | |
+| `inventory-service` | `controlstock_inventory` | `controlstock_inventory_user` | |
+| `adjustment-service` | `controlstock_adjustment` | `controlstock_adjustment_user` | |
+| `alert-service` | `controlstock_alert` | `controlstock_alert_user` | |
+| `supplier-service` | `controlstock_supplier` | `controlstock_supplier_user` | |
+| `report-service` | `controlstock_reporting` | `controlstock_reporting_user` | **override**: el slug `report` ≠ nombre de BD real |
+| `audit-service` | `controlstock_audit` | `controlstock_audit_user` | |
+| `integration-service` | `controlstock_integration` | `controlstock_integration_user` | |
+| `report-etl-service` | — | — | **sin BD propia** (Spark ETL; lee read model Mongo + JDBC a reporting/audit). No migra. |
+
+### Step de la Shared Library: `runDatabaseMigration.groovy`
+
+Corre Liquibase directamente desde un container `liquibase` del pod-agente (el agente está dentro del cluster, así que alcanza `postgresql.data.svc.cluster.local` por DNS; no necesita el baile ConfigMap+Job que sí requiere el script de bootstrap externo). Aplica el fix de `--searchPath` + changelog relativo (Liquibase 4.x falla con `root.yaml does not exist` si se pasa una ruta absoluta a `--changeLogFile`).
+
+```groovy
+// vars/runDatabaseMigration.groovy
+def call(Map config = [:]) {
+    def service = config.service                                   // p.ej. "iam-service"
+    def slug    = service.replaceAll(/-service$/, '').replaceAll('-', '_')
+    def dbName  = config.dbName  ?: "controlstock_${slug}"         // override p.ej. controlstock_reporting
+    def dbUser  = config.dbUser  ?: "${dbName}_user"
+    def credId  = config.dbCredId ?: "db-${slug}"                 // credencial Jenkins (password), respaldada por Vault
+    def changelogDir = "${env.WORKSPACE}/${service}/changelog"
+
+    if (!fileExists("${changelogDir}/root.yaml")) {
+        error("runDatabaseMigration: no existe ${changelogDir}/root.yaml para ${service}")
+    }
+
+    container('liquibase') {
+        withCredentials([string(credentialsId: credId, variable: 'DB_PASSWORD')]) {
+            sh """
+                liquibase \
+                  --searchPath='${changelogDir}' \
+                  --changeLogFile=root.yaml \
+                  --url='jdbc:postgresql://postgresql.data.svc.cluster.local:5432/${dbName}' \
+                  --username='${dbUser}' \
+                  --password="\$DB_PASSWORD" \
+                  --logLevel=info \
+                  update
+            """
+        }
+    }
+    echo "[DB-MIGRATION] ${service} → ${dbName}: OK"
+}
+```
+
+Añadir el pod-template `resources/org/controlstock/podMigrations.yaml`:
+
+```yaml
+# resources/org/controlstock/podMigrations.yaml
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: jenkins-agent
+  containers:
+    - name: liquibase
+      image: liquibase/liquibase:4.27
+      command: ["sleep"]
+      args: ["infinity"]
+      resources:
+        requests: { cpu: "100m", memory: "256Mi" }
+        limits:   { cpu: "500m", memory: "512Mi" }
+    - name: jnlp
+      image: jenkins/inbound-agent:latest
+```
+
+### Jenkinsfile del repositorio `controlstock-migrations`
+
+Detecta los servicios cuyos changelogs cambiaron en el push (`git diff`) y aplica solo esos. Idempotente: Liquibase omite los changesets ya registrados en `databasechangelog`.
+
+```groovy
+// controlstock-migrations/Jenkinsfile
+@Library('controlstock-shared-lib') _
+
+// BD destino cuando el slug != nombre de BD real
+def DB_OVERRIDES = ['report-service': 'controlstock_reporting']
+// Servicios sin BD propia (no migran)
+def NO_DB = ['report-etl-service']
+
+pipeline {
+  agent {
+    kubernetes { yaml libraryResource('org/controlstock/podMigrations.yaml') }
+  }
+  options { timestamps(); ansiColor('xterm') }
+  stages {
+    stage('Detect Changed Services') {
+      steps {
+        script {
+          // En el primer build de la rama no hay HEAD~1: migra todo el árbol
+          def diffCmd = sh(returnStatus: true, script: 'git rev-parse HEAD~1') == 0 ?
+              'git diff --name-only HEAD~1 HEAD' : 'git ls-files'
+          def dirs = sh(returnStdout: true,
+              script: "${diffCmd} | grep '/changelog/' | cut -d/ -f1 | sort -u || true").trim()
+          def svcs = dirs ? dirs.split('\\n').findAll { it && it.endsWith('-service') && !(it in NO_DB) } : []
+          env.CHANGED_SERVICES = svcs.join(' ')
+          echo "Servicios con migraciones a aplicar: ${env.CHANGED_SERVICES ?: '(ninguno)'}"
+        }
+      }
+    }
+    stage('Run Migrations') {
+      when { expression { env.CHANGED_SERVICES?.trim() } }
+      steps {
+        script {
+          for (svc in env.CHANGED_SERVICES.split(' ')) {
+            if (svc) { runDatabaseMigration(service: svc, dbName: DB_OVERRIDES[svc]) }
+          }
+        }
+      }
+    }
+  }
+  post { always { notify(status: currentBuild.currentResult) } }
+}
+```
+
+### Creación del job y webhook de migraciones
+
+El job se crea igual que los demás Multibranch (Paso 5), apuntando al repo `controlstock-migrations` con token `controlstock-migrations`:
+
+```bash
+# Webhook en Gitea para el repo de migraciones (solo eventos push)
+curl -s -X POST \
+  "http://<VPS_IP>:3000/api/v1/repos/controlstock/controlstock-migrations/hooks" \
+  -H "Content-Type: application/json" \
+  -u "gitea-admin:gitea-admin" \
+  -d '{
+    "type": "gitea",
+    "config": {
+      "url": "http://<VPS_IP>:8080/multibranch-webhook-trigger/invoke?token=controlstock-migrations",
+      "content_type": "json"
+    },
+    "events": ["push"],
+    "active": true
+  }'
+```
+
+> A diferencia de los repos de servicio, el de migraciones se dispara **solo en `push`** (no en `pull_request`): las migraciones se aplican cuando se mergea a la rama, no en cada PR abierto.
+
+### Credenciales de base de datos
+
+El step lee la contraseña desde una credencial Jenkins `db-<slug>` (tipo *Secret text*), respaldada por Vault en `secret/controlstock/<servicio>/db`. En `local`/`dev` el valor por defecto es `changeme_<slug>` (creado por `init-databases.sh`); **rotar vía Vault antes de `prod`**. Para `report-service` la credencial es `db-report` apuntando al password de `controlstock_reporting_user` (`changeme_reporting` en local).
+
+```yaml
+# docker/jenkins.yaml (fragmento credentials — una por BD)
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - string:
+              scope: GLOBAL
+              id: "db-iam"
+              secret: "${DB_IAM_PASSWORD}"
+              description: "Password controlstock_iam_user"
+          # ... db-catalog, db-inventory, ..., db-report (controlstock_reporting_user)
+```
+
+### Alternativa GitOps recomendada para `prod`: hook PreSync de ArgoCD
+
+Para hacer el orden esquema-antes-de-pods **explícito y bloqueante** en `prod`, el chart Helm de cada servicio puede incluir un `Job` de migración anotado como hook PreSync. ArgoCD lo ejecuta y espera su éxito antes de aplicar el `Deployment`. El changelog se entrega como imagen `controlstock-migrations:<servicio>-<tag>` construida por este pipeline (changelogs horneados), o vía initContainer que clona el repo.
+
+```yaml
+# helm/<service>/templates/migration-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-liquibase-{{ .Values.image.tag | default "latest" }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: liquibase
+          image: liquibase/liquibase:4.27
+          args:
+            - "--searchPath=/liquibase/changelog"
+            - "--changeLogFile=root.yaml"
+            - "--url=jdbc:postgresql://postgresql.data.svc.cluster.local:5432/{{ .Values.db.name }}"
+            - "--username={{ .Values.db.user }}"
+            - "--password=$(DB_PASSWORD)"
+            - "update"
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.db.secret }}, key: password }
+          volumeMounts:
+            - { name: changelog, mountPath: /liquibase/changelog }
+      volumes:
+        - name: changelog
+          configMap: { name: {{ .Release.Name }}-changelog }
+```
+
+> En `local`/`dev` se prefiere el pipeline Jenkins (feedback más rápido y desacoplado del rollout). En `prod` el hook PreSync añade la garantía de orden bajo sync manual.
+
+### Verificación de la etapa de migraciones
+
+```bash
+# 1. Cambiar un changelog y pushear (dispara el job de migraciones)
+git clone http://gitea-admin:gitea-admin@<VPS_IP>:3000/controlstock/controlstock-migrations.git
+cd controlstock-migrations
+# (editar p.ej. catalog-service/changelog/00002_*.yaml)
+git add -A && git commit -m "feat(catalog): nueva migración" && git push
+
+# 2. Confirmar que el job de Jenkins corrió y aplicó solo catalog-service
+curl -s "http://<VPS_IP>:8080/job/controlstock-migrations/job/main/lastBuild/consoleText" \
+  --user "admin:<password>" | grep "DB-MIGRATION"
+
+# 3. Confirmar el changeset en la BD
+kubectl exec -n data postgresql-0 -- \
+  env PGPASSWORD=changeme_pg_admin psql -U postgres -d controlstock_catalog \
+  -tAc "SELECT id, dateexecuted FROM databasechangelog ORDER BY orderexecuted DESC LIMIT 3;"
+```
+
+---
+
 ## Verificación del Pipeline Completo
 
 Para verificar que el pipeline CI/CD funciona de extremo a extremo, realizar un commit trivial en `iam-service`.
@@ -846,9 +1114,9 @@ Los siguientes criterios deben cumplirse para considerar esta etapa completa.
 
 | # | Criterio | Verificación | Modo |
 |---|----------|-------------|------|
-| 6 | 11 jobs Multibranch Pipeline creados en Jenkins | `curl .../api/json` devuelve 11 jobs | ✓ auto (local) |
+| 6 | 12 jobs Multibranch Pipeline creados en Jenkins (11 servicios/web + `controlstock-migrations`) | `curl .../api/json` devuelve 12 jobs | ✓ auto (local) |
 | 7 | Todos los jobs reconocen la Shared Library | Primer build muestra `Loading shared library controlstock-shared-lib` | ✓ auto (local) |
-| 8 | Webhooks configurados en Gitea para todos los repos (excepto shared-lib) | `GET /api/v1/repos/.../hooks` devuelve webhook activo | ✓ auto (local) |
+| 8 | Webhooks configurados en Gitea para todos los repos (excepto shared-lib); `controlstock-migrations` solo en `push` | `GET /api/v1/repos/.../hooks` devuelve webhook activo | ✓ auto (local) |
 | 9 | Job `report-etl-service` usa `buildScalaBatchJob` (sbt) | Jenkinsfile tiene `buildScalaBatchJob()` | □ manual |
 
 ### Integración Jenkins-K3s
@@ -893,3 +1161,16 @@ Los siguientes criterios deben cumplirse para considerar esta etapa completa.
 | 30 | Credencial `gitops-git-credentials` configurada | Jenkins credentials store visible | ✓ auto (local) |
 | 31 | Credencial `k3s-kubeconfig` configurada | Jenkins credentials store visible | ✓ auto (local) |
 | 32 | Pipeline NO expone secretos en logs | Logs no contienen tokens en texto plano | □ revisión manual |
+| 33 | Credenciales `db-<slug>` (una por BD) configuradas, respaldadas por Vault | Jenkins credentials store muestra `db-iam`, `db-catalog`, …, `db-report` | ✓ auto (local) |
+
+### Migraciones de Base de Datos (Liquibase)
+
+| # | Criterio | Verificación | Modo |
+|---|----------|-------------|------|
+| 34 | Migración inicial (bootstrap) aplicada en las 9 BDs | `databasechangelog` existe en cada `controlstock_*` (30 tablas de dominio; iam con 7 roles) | ✓ manual (bootstrap) |
+| 35 | Job `controlstock-migrations` creado con su `Jenkinsfile` de migraciones | `http://<VPS_IP>:8080/job/controlstock-migrations/` existe | ✓ auto (local) |
+| 36 | Webhook `push` del repo `controlstock-migrations` dispara el job | Push de un changelog lanza un build | ✓ auto (local) |
+| 37 | Stage `Detect Changed Services` aplica solo los servicios con changelogs modificados | Build log lista los servicios cambiados | ✓ auto (local) |
+| 38 | Stage `DB Migration` aplica Liquibase y es idempotente | Re-ejecutar sin cambios → `0 changesets`; nuevo registro en `databasechangelog` al cambiar | ✓ auto (local) |
+| 39 | `report-service` migra contra `controlstock_reporting` (override) y `report-etl-service` NO migra | BD `controlstock_reporting` con `report_*`; sin BD `controlstock_report_etl` | ✓ auto (local) |
+| 40 | (prod) Hook PreSync de ArgoCD ejecuta la migración antes del rollout | `Job` PreSync `Succeeded` antes del `Deployment` | □ manual (prod) |

@@ -28,6 +28,9 @@
 #   --pg-pass     PASS     Password admin PostgreSQL               (default: changeme_pg_admin)
 #   --tag         TAG      Tag changelog a ejecutar (default: empty = todos)
 #   --rollback    COUNT    Rollback N changesets en vez de update
+#   --db-name     NAME     Nombre de BD destino (override; si el slug != BD real)
+#   --db-user     USER     Usuario BD (override; default: <db-name>_user)
+#   --db-pass     PASS     Password BD (override; default: changeme_<slug>)
 #   --dry-run              Muestra comandos sin ejecutar
 #   --gitea-clone          Clonar desde Gitea (default). Si se omite usa directorio local.
 #
@@ -65,6 +68,9 @@ CHANGELOG_TAG=""
 ROLLBACK_COUNT=""
 DRY_RUN=false
 GITEA_CLONE=false
+DB_NAME_OVERRIDE=""
+DB_USER_OVERRIDE=""
+DB_PASS_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -80,6 +86,9 @@ while [[ $# -gt 0 ]]; do
     --pg-pass)    PG_PASS="$2";     shift 2 ;;
     --tag)        CHANGELOG_TAG="$2"; shift 2 ;;
     --rollback)   ROLLBACK_COUNT="$2"; shift 2 ;;
+    --db-name)    DB_NAME_OVERRIDE="$2"; shift 2 ;;
+    --db-user)    DB_USER_OVERRIDE="$2"; shift 2 ;;
+    --db-pass)    DB_PASS_OVERRIDE="$2"; shift 2 ;;
     --dry-run)    DRY_RUN=true;     shift ;;
     --gitea-clone) GITEA_CLONE=true; shift ;;
     *) die "Opción desconocida: $1" ;;
@@ -98,6 +107,9 @@ slugify() { echo "$1" | tr '-' '_' | tr '[:upper:]' '[:lower:]' | sed 's/_servic
 
 SERVICE_SLUG=$(slugify "$SERVICE")
 DB_NAME="${PG_PREFIX}_${SERVICE_SLUG}"
+# Override del nombre de BD cuando el slug del servicio no coincide con la BD real
+# (ej. report-etl-service cuyo DDL de reporting vive en controlstock_reporting)
+[[ -n "$DB_NAME_OVERRIDE" ]] && DB_NAME="$DB_NAME_OVERRIDE"
 MIGRATIONS_REPO="${PROJECT}-migrations"
 GITEA_URL="http://${VM_IP}:3000"
 
@@ -144,11 +156,13 @@ run_liquibase_job() {
   fi
 
   local changelog_file="root.yaml"
-  local changelog_path="/liquibase/changelog/${changelog_file}"
+  local changelog_mount="/liquibase/changelog"
   local pg_host="postgresql.data.svc.cluster.local"
   local jdbc_url="jdbc:postgresql://${pg_host}:5432/${DB_NAME}"
   local configmap_name="liquibase-${SERVICE_SLUG}"
   local job_name="liquibase-${SERVICE_SLUG}-$(date +%s)"
+  local db_user="${DB_USER_OVERRIDE:-${DB_NAME}_user}"
+  local db_pass="${DB_PASS_OVERRIDE:-changeme_${SERVICE_SLUG}}"
 
   if [[ "$DRY_RUN" == true ]]; then
     echo -e "${YELLOW}[DRY-RUN]${RESET}  Liquibase $lb_command → $DB_NAME"
@@ -190,10 +204,13 @@ spec:
         - name: liquibase
           image: liquibase/liquibase:4.27
           args:
+            # searchPath + changeLogFile relativo: Liquibase 4.x resuelve la ruta
+            # contra el searchPath; una ruta absoluta provoca "root.yaml does not exist"
+            - "--searchPath=${changelog_mount}"
             - "--url=${jdbc_url}"
-            - "--username=${DB_NAME}_user"
-            - "--password=changeme_${SERVICE_SLUG}"
-            - "--changeLogFile=${changelog_path}"
+            - "--username=${db_user}"
+            - "--password=${db_pass}"
+            - "--changeLogFile=${changelog_file}"
             - "--logLevel=info"
             - "${lb_command}"
           volumeMounts:

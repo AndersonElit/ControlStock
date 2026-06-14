@@ -688,8 +688,12 @@ if [[ "${#BC_TAGS[@]}" -gt 0 ]]; then
         BLOCK="-- TODO: extraer manualmente desde $SCHEMA_SQL las tablas de $TAG"
       fi
 
-      if [[ -f "$CHANGELOG_FILE" ]]; then
-        log_warn "$SERVICE — $CHANGELOG_FILE ya existe; omitiendo (no se sobreescribe)."
+      # El generador por-servicio (maven_hexagonal_scaffold.py) deja un stub
+      # con "-- TODO: contenido poblado por scaffold-all-services.sh". Esta sección
+      # es la fuente autoritativa del 00001 desde el schema.sql: sobreescribe el
+      # stub, pero respeta un changelog ya poblado a mano (DDL real).
+      if [[ -f "$CHANGELOG_FILE" ]] && ! grep -q "TODO: contenido poblado por scaffold" "$CHANGELOG_FILE"; then
+        log_warn "$SERVICE — $CHANGELOG_FILE ya tiene DDL real; omitiendo (no se sobreescribe)."
         continue
       fi
 
