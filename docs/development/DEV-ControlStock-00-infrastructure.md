@@ -34,7 +34,7 @@ Los siguientes elementos deben estar disponibles en la máquina local del desarr
 
 | Recurso | Local | Producción |
 |---|---|---|
-| Acceso SSH al VPS | Par de claves SSH (`~/.ssh/controlstock_local`) | Par de claves SSH (`~/.ssh/controlstock_prod`) |
+| Acceso SSH al VPS | Par de claves SSH (`~/.ssh/id_ed25519`) | Par de claves SSH (`~/.ssh/controlstock_prod`) |
 | Configuración OCI | No requerida | `~/.oci/config` con API key OCI |
 | Variables de entorno | `VPS_IP` exportada | `VPS_IP` exportada (IP pública OCI) |
 | Repositorio del proyecto | Clonado localmente | Clonado localmente |
@@ -62,7 +62,7 @@ Este paso crea la máquina virtual sobre la cual se instalará K3s. Ejecutar **s
 
 ### Opción A — Entorno Local (QEMU/KVM)
 
-El script `qemu-vps.sh` crea y arranca una VM Ubuntu 24.04 LTS con los recursos mínimos para ejecutar K3s con todos los componentes de ControlStock.
+El script `qemu-vps.sh` crea una VM Ubuntu con los recursos necesarios para ejecutar K3s y todos los componentes de ControlStock.
 
 **Recursos recomendados para el VPS local:**
 
@@ -73,36 +73,66 @@ El script `qemu-vps.sh` crea y arranca una VM Ubuntu 24.04 LTS con los recursos 
 | Disco | 60 GB | 100 GB |
 | Red | Bridge/NAT | Bridge (acceso directo desde host) |
 
-**Ejecutar:**
+**Paso 1 — Crear la VM:**
 
 ```bash
-bash .claude/scripts/qemu-vps.sh \
-  --name controlstock-local \
-  --memory 8192 \
-  --cpus 4 \
-  --disk 60G \
-  --os ubuntu-24.04 \
-  --ssh-key ~/.ssh/controlstock_local.pub
+bash .claude/scripts/qemu-vps.sh create --vcpus 4 --ram 8192 --disksize 60G
 ```
 
-**Salida esperada:**
+> **Nota:** El nombre por defecto de la VM es `sdlc-vps`. Para usar otro nombre, agregar `--name <nombre>`.
+>
+> Finalizada la creación, instalar Ubuntu desde la consola:
+> ```bash
+> virsh console sdlc-vps
+> ```
 
-```
-[qemu-vps] VM 'controlstock-local' creada exitosamente.
-[qemu-vps] IP asignada: 192.168.122.X
-[qemu-vps] Acceso: ssh ubuntu@192.168.122.X -i ~/.ssh/controlstock_local
-```
-
-Exportar la IP asignada:
+**Paso 2 — Arrancar la VM:**
 
 ```bash
-export VPS_IP=192.168.122.X   # reemplazar con la IP impresa por qemu-vps.sh
+virsh start sdlc-vps
 ```
 
-**Verificar conectividad SSH:**
+**Paso 3 — Obtener la IP asignada:**
 
 ```bash
-ssh ubuntu@${VPS_IP} -i ~/.ssh/controlstock_local "uname -a && free -h && df -h /"
+bash .claude/scripts/qemu-vps.sh status
+```
+
+Ejemplo de salida:
+```
+[OK]    IP: 192.168.122.X
+  SSH: ssh ubuntu@192.168.122.X
+```
+
+Exportar la IP:
+
+```bash
+export VPS_IP=192.168.122.X   # reemplazar con la IP mostrada por qemu-vps.sh status
+```
+
+**Paso 4 — Copiar clave SSH al VPS:**
+
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub ubuntu@${VPS_IP}
+```
+
+**Paso 5 — Verificar acceso sin contraseña:**
+
+```bash
+ssh ubuntu@${VPS_IP}
+```
+
+**Paso 6 — Configurar sudo sin contraseña (dentro de la VM):**
+
+```bash
+echo "ubuntu ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ubuntu-nopasswd
+sudo chmod 440 /etc/sudoers.d/ubuntu-nopasswd
+```
+
+**Paso 7 — Verificar conectividad y recursos:**
+
+```bash
+ssh ubuntu@${VPS_IP} "uname -a && free -h && df -h /"
 ```
 
 ### Opción B — Entorno Producción (Oracle Cloud OCI)

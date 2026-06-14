@@ -1,0 +1,16 @@
+output "gitea_url"       { value = "http://${var.vm_ip}:3000" }
+output "jenkins_url"     { value = "http://${var.vm_ip}:8080" }
+output "argocd_url"      { value = "http://${var.vm_ip}:8081" }
+output "keycloak_url"    { value = "http://${var.vm_ip}:8082" }
+output "vault_url"       { value = "http://${var.vm_ip}:8200" }
+output "grafana_url"     { value = "http://${var.vm_ip}:3001" }
+output "prometheus_url"  { value = "http://${var.vm_ip}:9090" }
+output "lra_url"         { value = var.install_lra      ? "http://${var.vm_ip}:50000" : "disabled" }
+output "wiremock_url"    { value = var.install_wiremock ? "http://${var.vm_ip}:9999"  : "disabled" }
+output "kafka_bootstrap" { value = "kafka-kafka-bootstrap.messaging.svc.cluster.local:9092" }
+output "otel_grpc"       { value = var.install_tempo ? "tempo.observability.svc.cluster.local:4317" : "disabled" }
+output "kong_proxy_url"  { value = var.install_kong ? "http://${var.vm_ip}:8000" : "disabled" }
+output "kong_admin_url"    { value = var.install_kong  ? "kong-kong-admin.gateway.svc.cluster.local:8001 (ClusterIP)" : "disabled" }
+output "minio_api_url"     { value = var.install_minio ? "http://${var.vm_ip}:9000" : "disabled" }
+output "minio_console_url"    { value = var.install_minio    ? "http://${var.vm_ip}:9001"  : "disabled" }
+output "openfaas_gateway_url" { value = var.install_openfaas ? "http://${var.vm_ip}:31112" : "disabled" }

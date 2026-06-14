@@ -241,6 +241,7 @@ module "helm_secrets" {
 module "helm_cicd" {
   source                 = "./modules/helm-cicd"
   depends_on             = [module.helm_data, module.helm_secrets]
+  env                    = var.env
   vm_ip                  = var.vm_ip
   project                = var.project
   kubeconfig_path        = var.kubeconfig_path
@@ -334,7 +335,7 @@ install_kong     = true
 TFEOF
 
   # ── auto.tfvars (con variables del script — NO usar << 'EOF' aquí) ─────────
-  cat > "$TF_ROOT/auto.tfvars" << TFEOF
+  cat > "$TF_ROOT/config.auto.tfvars" << TFEOF
 # Auto-generado por base-infrastructure-builder.sh — no editar manualmente
 kubeconfig_path  = "${KUBECONFIG_PATH}"
 vm_ip            = "${VM_IP}"
@@ -400,30 +401,21 @@ resource "helm_release" "cert_manager" {
 resource "helm_release" "minio" {
   count      = var.install_minio ? 1 : 0
   name       = "minio"
-  repository = "https://charts.bitnami.com/bitnami"
+  repository = "https://charts.min.io/"
   chart      = "minio"
-  version    = "14.7.14"
+  version    = "5.4.0"
   namespace  = "infra"
   wait       = true
   timeout    = 300
-  set           { name = "auth.rootUser";                value = "minioadmin" }
-  set_sensitive { name = "auth.rootPassword";            value = var.minio_root_password }
-  set           { name = "mode";                         value = "standalone" }
-  set           { name = "persistence.size";             value = "10Gi" }
-  set           { name = "service.type";                 value = "NodePort" }
-  set           { name = "service.nodePorts.api";        value = "9000" }
-  set           { name = "service.nodePorts.console";    value = "9001" }
-  set           { name = "resources.requests.memory";    value = "256Mi" }
-  set           { name = "resources.requests.cpu";       value = "100m" }
-  values = [<<-YAML
-    provisioning:
-      enabled: true
-      buckets:
-        - name: "${var.project}-reports"
-          region: us-east-1
-          versioning: false
-  YAML
-  ]
+  set           { name = "rootUser";                       value = "minioadmin" }
+  set_sensitive { name = "rootPassword";                   value = var.minio_root_password }
+  set           { name = "mode";                           value = "standalone" }
+  set           { name = "persistence.size";               value = "10Gi" }
+  set           { name = "service.type";                   value = "NodePort" }
+  set           { name = "service.nodePorts.api";          value = "9000" }
+  set           { name = "service.nodePorts.console";      value = "9001" }
+  set           { name = "resources.requests.memory";      value = "256Mi" }
+  set           { name = "environment.MINIO_DEFAULT_BUCKETS"; value = "${var.project}-reports" }
 }
 TFEOF
 
@@ -486,11 +478,34 @@ resource "helm_release" "postgresql" {
   namespace  = "data"
   wait       = true
   timeout    = 300
-  set           { name = "image.tag";                         value = "16" }
   set_sensitive { name = "auth.postgresPassword";             value = var.pg_admin_password }
+  set           { name = "image.tag";                         value = "latest" }
   set           { name = "primary.persistence.size";          value = "10Gi" }
   set           { name = "primary.resources.requests.memory"; value = "256Mi" }
   set           { name = "primary.resources.requests.cpu";    value = "100m" }
+}
+# Crea las bases de datos que necesitan los servicios (gitea, keycloak).
+# El chart de PostgreSQL solo provee la BD 'postgres' por defecto.
+resource "null_resource" "postgres_databases" {
+  depends_on = [helm_release.postgresql]
+  triggers   = { databases = "gitea,keycloak" }
+  provisioner "local-exec" {
+    command = <<-CMD
+      set -e
+      KC="--kubeconfig=${var.kubeconfig_path}"
+      echo "[INFO] Esperando PostgreSQL Ready..."
+      kubectl $KC wait pod/postgresql-0 -n data --for=condition=Ready --timeout=180s
+      for DB in gitea keycloak; do
+        echo "[INFO] Asegurando base de datos '$DB' (idempotente)..."
+        kubectl $KC exec -n data postgresql-0 -- env PGPASSWORD='${var.pg_admin_password}' \
+          psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" \
+          | grep -q 1 || \
+        kubectl $KC exec -n data postgresql-0 -- env PGPASSWORD='${var.pg_admin_password}' \
+          psql -U postgres -c "CREATE DATABASE \"$DB\""
+      done
+      echo "[OK] Bases de datos gitea y keycloak aseguradas"
+    CMD
+  }
 }
 resource "helm_release" "mongodb" {
   name       = "mongodb"
@@ -500,8 +515,8 @@ resource "helm_release" "mongodb" {
   namespace  = "data"
   wait       = true
   timeout    = 300
-  set           { name = "image.tag";                    value = "7.0" }
   set_sensitive { name = "auth.rootPassword";            value = var.mongo_admin_password }
+  set           { name = "image.tag";                    value = "latest" }
   set           { name = "persistence.size";             value = "10Gi" }
   set           { name = "resources.requests.memory";    value = "256Mi" }
   set           { name = "resources.requests.cpu";       value = "100m" }
@@ -534,27 +549,84 @@ variable "pg_admin_password"       { type = string; sensitive = true }
 TFEOF
 
   cat > "$TF_ROOT/modules/helm-identity/main.tf" << 'TFEOF'
-resource "helm_release" "keycloak" {
-  name       = "keycloak"
-  repository = "https://charts.bitnami.com/bitnami"
-  chart      = "keycloak"
-  version    = "21.4.4"
-  namespace  = "identity"
-  wait       = true
-  timeout    = 600
-  set           { name = "auth.adminUser";               value = "admin" }
-  set_sensitive { name = "auth.adminPassword";           value = var.keycloak_admin_password }
-  set           { name = "postgresql.enabled";           value = "false" }
-  set           { name = "externalDatabase.host";        value = "postgresql.data.svc.cluster.local" }
-  set           { name = "externalDatabase.port";        value = "5432" }
-  set           { name = "externalDatabase.user";        value = "postgres" }
-  set_sensitive { name = "externalDatabase.password";    value = var.pg_admin_password }
-  set           { name = "externalDatabase.database";    value = "keycloak" }
-  set           { name = "service.type";                 value = "NodePort" }
-  set           { name = "service.nodePorts.http";       value = "8082" }
-  set           { name = "replicaCount";                 value = "1" }
-  set           { name = "resources.requests.memory";    value = "512Mi" }
-  set           { name = "resources.requests.cpu";       value = "250m" }
+resource "kubernetes_deployment" "keycloak" {
+  metadata {
+    name      = "keycloak"
+    namespace = "identity"
+    labels    = { app = "keycloak" }
+  }
+  spec {
+    replicas = 1
+    selector {
+      match_labels = { app = "keycloak" }
+    }
+    template {
+      metadata {
+        labels = { app = "keycloak" }
+      }
+      spec {
+        container {
+          name  = "keycloak"
+          image = "quay.io/keycloak/keycloak:26.0"
+          args  = ["start-dev"]
+          port {
+            container_port = 8080
+            name           = "http"
+          }
+          env {
+            name  = "KC_BOOTSTRAP_ADMIN_USERNAME"
+            value = "admin"
+          }
+          env {
+            name  = "KC_BOOTSTRAP_ADMIN_PASSWORD"
+            value = var.keycloak_admin_password
+          }
+          env {
+            name  = "KC_DB"
+            value = "postgres"
+          }
+          env {
+            name  = "KC_DB_URL"
+            value = "jdbc:postgresql://postgresql.data.svc.cluster.local:5432/keycloak"
+          }
+          env {
+            name  = "KC_DB_USERNAME"
+            value = "postgres"
+          }
+          env {
+            name  = "KC_DB_PASSWORD"
+            value = var.pg_admin_password
+          }
+          env {
+            name  = "KC_HTTP_ENABLED"
+            value = "true"
+          }
+          resources {
+            requests = {
+              cpu    = "250m"
+              memory = "512Mi"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+resource "kubernetes_service" "keycloak" {
+  metadata {
+    name      = "keycloak"
+    namespace = "identity"
+  }
+  spec {
+    type     = "NodePort"
+    selector = { app = "keycloak" }
+    port {
+      port        = 8080
+      target_port = 8080
+      node_port   = 8082
+      name        = "http"
+    }
+  }
 }
 TFEOF
 
@@ -675,6 +747,7 @@ TFEOF
 
   # ── modules/helm-cicd ────────────────────────────────────────────────────
   cat > "$TF_ROOT/modules/helm-cicd/variables.tf" << 'TFEOF'
+variable "env"                     { type = string }
 variable "vm_ip"                  { type = string }
 variable "project"                { type = string }
 variable "kubeconfig_path"        { type = string }
@@ -773,11 +846,16 @@ resource "helm_release" "gitea" {
   version    = "10.4.0"
   namespace  = "cicd"
   wait       = true
-  timeout    = 300
+  timeout    = 600
+  # La imagen bitnami/redis-cluster fue purgada de Docker Hub; gitea no la
+  # necesita en entorno local (usa cola/caché interna por defecto).
+  set           { name = "redis-cluster.enabled";              value = "false" }
+  set           { name = "redis.enabled";                      value = "false" }
   set           { name = "gitea.admin.username";               value = "gitea_admin" }
   set_sensitive { name = "gitea.admin.password";               value = var.gitea_admin_password }
   set           { name = "gitea.admin.email";                  value = "admin@${var.project}.local" }
   set           { name = "postgresql.enabled";                 value = "false" }
+  set           { name = "postgresql-ha.enabled";             value = "false" }
   set           { name = "gitea.config.database.DB_TYPE";      value = "postgres" }
   set           { name = "gitea.config.database.HOST";         value = "postgresql.data.svc.cluster.local:5432" }
   set           { name = "gitea.config.database.NAME";         value = "gitea" }
@@ -792,34 +870,39 @@ resource "helm_release" "gitea" {
 }
 resource "helm_release" "jenkins" {
   name       = "jenkins"
-  repository = "https://charts.bitnami.com/bitnami"
+  repository = "https://charts.jenkins.io"
   chart      = "jenkins"
-  version    = "13.4.2"
+  version    = "5.9.25"
   namespace  = "cicd"
   wait       = true
   timeout    = 600
   depends_on = [kubernetes_service_account.jenkins]
-  set           { name = "service.type";               value = "NodePort" }
-  set           { name = "service.nodePorts.http";     value = "8080" }
-  set           { name = "jenkinsUser";                value = "admin" }
-  set_sensitive { name = "jenkinsPassword";            value = var.jenkins_admin_password }
-  set           { name = "persistence.size";           value = "5Gi" }
-  set           { name = "resources.requests.memory";  value = "512Mi" }
-  set           { name = "resources.requests.cpu";     value = "250m" }
+  # Usa el ServiceAccount creado por Terraform (con el ClusterRoleBinding
+  # cluster-admin) en lugar de que el chart cree uno propio.
+  set           { name = "serviceAccount.create";             value = "false" }
+  set           { name = "serviceAccount.name";               value = "jenkins" }
+  set           { name = "controller.serviceType";            value = "NodePort" }
+  set           { name = "controller.serviceNodePort";        value = "8080" }
+  set           { name = "controller.admin.username";          value = "admin" }
+  set_sensitive { name = "controller.admin.password";       value = var.jenkins_admin_password }
+  set           { name = "persistence.size";                  value = "5Gi" }
+  set           { name = "controller.resources.requests.memory"; value = "512Mi" }
+  set           { name = "controller.resources.requests.cpu";    value = "250m" }
+  set           { name = "controller.installPlugins[0]";      value = "kubernetes" }
 }
 resource "helm_release" "argocd" {
   name       = "argocd"
-  repository = "https://charts.bitnami.com/bitnami"
+  repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
-  version    = "6.0.5"
+  version    = "9.5.21"
   namespace  = "cicd"
   wait       = true
   timeout    = 600
-  set { name = "server.service.type";                   value = "NodePort" }
-  set { name = "server.service.nodePorts.http";         value = "8081" }
-  set { name = "server.extraArgs";                      value = "{--insecure}" }
-  set { name = "redis.enabled";                         value = "true" }
-  set { name = "repoServer.resources.requests.memory";  value = "128Mi" }
+  set { name = "server.service.type";              value = "NodePort" }
+  set { name = "server.service.nodePortHttp";      value = "8081" }
+  set { name = "server.extraArgs[0]";              value = "--insecure" }
+  set { name = "repoServer.resources.requests.memory"; value = "128Mi" }
+  set { name = "configs.params.server\\.insecure"; value = "true" }
 }
 # AppProject — sustituye __PROJECT__ y __VM_IP__ via sed
 resource "null_resource" "argocd_appproject" {
@@ -889,6 +972,7 @@ resource "helm_release" "loki" {
   values = [<<-YAML
     deploymentMode: SingleBinary
     loki:
+      useTestSchema: true
       commonConfig:
         replication_factor: 1
       storage:
@@ -903,6 +987,12 @@ resource "helm_release" "loki" {
       replicas: 0
     backend:
       replicas: 0
+    # Los cachés memcached piden demasiada RAM para una VM single-node y
+    # quedan en Pending (Insufficient memory), agotando el timeout de Helm.
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
   YAML
   ]
 }
@@ -1153,7 +1243,10 @@ resource "helm_release" "kong" {
     # Ingress Controller (gestión de rutas via KongIngress / HTTPRoute)
     ingressController:
       enabled: true
-      installCRDs: true
+      # Las CRDs ya las instala Helm desde el directorio crds/ del chart.
+      # Con installCRDs:true se renderizan además como plantillas y chocan
+      # con las del crds/ (que no tienen ownership de Helm) -> install falla.
+      installCRDs: false
       env:
         kong_admin_url: http://localhost:8001
 
@@ -1259,6 +1352,48 @@ resource "helm_release" "openfaas" {
 TFEOF
 
   log_ok "Estructura Terraform generada en $TF_ROOT"
+
+  # Fix HCL syntax: Terraform does not allow semicolons between arguments
+  log "Corrigiendo sintaxis HCL (semicolons -> saltos de linea)..."
+  for f in $(find "$TF_ROOT" -name '*.tf' -type f); do
+    python3 -c "
+import sys
+with open(sys.argv[1], 'r') as fh:
+    lines = fh.readlines()
+output = []
+for line in lines:
+    stripped = line.rstrip()
+    if ';' not in stripped:
+        output.append(line)
+        continue
+    b1 = stripped.find('{')
+    if b1 == -1:
+        output.append(line)
+        continue
+    b2 = stripped.rfind('}')
+    if b2 == -1 or b2 <= b1:
+        output.append(line)
+        continue
+    content = stripped[b1+1:b2].strip()
+    if ';' not in content:
+        output.append(line)
+        continue
+    prefix = stripped[:b1].rstrip()
+    suffix = stripped[b2+1:]
+    indent = line[:len(line) - len(line.lstrip())]
+    attrs = [a.strip() for a in content.split(';')]
+    if prefix:
+        output.append(indent + prefix + ' {\n')
+    else:
+        output.append(indent + '{\n')
+    for a in attrs:
+        output.append(indent + '  ' + a + '\n')
+    output.append(indent + '}' + suffix + '\n')
+with open(sys.argv[1], 'w') as fh:
+    fh.writelines(output)
+" "$f" 2>/dev/null || true
+  done
+  log_ok "Sintaxis HCL corregida"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1292,7 +1427,8 @@ echo "[INFO] Instalando K3s ${K3S_VER}..."
 curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="${K3S_VER}" sh -s - \
   --disable traefik \
   --write-kubeconfig-mode 644 \
-  --node-name "${PROJECT}-node"
+  --node-name "${PROJECT}-node" \
+  --service-node-port-range=1-50000
 echo "[INFO] Esperando nodo Ready..."
 timeout 120 bash -c 'until k3s kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 3; done'
 k3s kubectl get nodes
@@ -1333,7 +1469,7 @@ run_terraform() {
   log "terraform plan..."
   run terraform -chdir="$TF_ROOT" plan \
     -var-file="environments/${ENV}.tfvars" \
-    -var-file="auto.tfvars" \
+    -var-file="config.auto.tfvars" \
     -out=tfplan -input=false
 
   log "terraform apply..."

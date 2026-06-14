@@ -27,3 +27,14 @@ Thumbs.db
 
 # Dependency directories
 node_modules/
+
+# Terraform — estado e infraestructura local
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/tfplan
+
+# Terraform — secretos y configuración sensible
+terraform/vault-init.json
+terraform/config.auto.tfvars
+terraform/environments/*.tfvars
