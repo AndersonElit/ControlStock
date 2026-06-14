@@ -412,8 +412,9 @@ resource "helm_release" "minio" {
   set           { name = "mode";                           value = "standalone" }
   set           { name = "persistence.size";               value = "10Gi" }
   set           { name = "service.type";                   value = "NodePort" }
-  set           { name = "service.nodePorts.api";          value = "9000" }
-  set           { name = "service.nodePorts.console";      value = "9001" }
+  set           { name = "service.nodePort";               value = "9000" }
+  set           { name = "consoleService.type";            value = "NodePort" }
+  set           { name = "consoleService.nodePort";        value = "9001" }
   set           { name = "resources.requests.memory";      value = "256Mi" }
   set           { name = "environment.MINIO_DEFAULT_BUCKETS"; value = "${var.project}-reports" }
 }
@@ -451,8 +452,8 @@ metadata:
     strimzi.io/kraft: enabled
 spec:
   kafka:
-    version: 3.8.0
-    metadataVersion: "3.8"
+    version: 3.7.0
+    metadataVersion: "3.7"
     listeners:
       - name: plain
         port: 9092
@@ -882,7 +883,7 @@ resource "helm_release" "jenkins" {
   set           { name = "serviceAccount.create";             value = "false" }
   set           { name = "serviceAccount.name";               value = "jenkins" }
   set           { name = "controller.serviceType";            value = "NodePort" }
-  set           { name = "controller.serviceNodePort";        value = "8080" }
+  set           { name = "controller.nodePort";               value = "8080" }
   set           { name = "controller.admin.username";          value = "admin" }
   set_sensitive { name = "controller.admin.password";       value = var.jenkins_admin_password }
   set           { name = "persistence.size";                  value = "5Gi" }

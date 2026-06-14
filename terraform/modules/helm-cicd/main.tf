@@ -124,7 +124,7 @@ resource "helm_release" "jenkins" {
     value = "NodePort"
   }
     set {
-    name = "controller.serviceNodePort"
+    name = "controller.nodePort"
     value = "8080"
   }
     set {

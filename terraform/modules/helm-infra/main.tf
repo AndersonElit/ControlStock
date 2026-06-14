@@ -74,11 +74,15 @@ resource "helm_release" "minio" {
     value = "NodePort"
   }
     set {
-    name = "service.nodePorts.api"
+    name = "service.nodePort"
     value = "9000"
   }
     set {
-    name = "service.nodePorts.console"
+    name = "consoleService.type"
+    value = "NodePort"
+  }
+    set {
+    name = "consoleService.nodePort"
     value = "9001"
   }
     set {
