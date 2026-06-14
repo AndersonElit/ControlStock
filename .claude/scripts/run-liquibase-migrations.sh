@@ -94,63 +94,41 @@ done
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=15 -i $SSH_KEY"
 ssh_run() { ssh $SSH_OPTS "${SSH_USER}@${VM_IP}" "$@"; }
 
-slugify() { echo "$1" | tr '-' '_' | tr '[:upper:]' '[:lower:]'; }
+slugify() { echo "$1" | tr '-' '_' | tr '[:upper:]' '[:lower:]' | sed 's/_service$//'; }
 
 SERVICE_SLUG=$(slugify "$SERVICE")
 DB_NAME="${PG_PREFIX}_${SERVICE_SLUG}"
 MIGRATIONS_REPO="${PROJECT}-migrations"
 GITEA_URL="http://${VM_IP}:3000"
 
+# Detectar kubeconfig automáticamente
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config-${PROJECT}-${ENV}}"
+[[ -f "$KUBECONFIG" ]] || export KUBECONFIG="$HOME/.kube/config-controlstock-${ENV}"
+[[ -f "$KUBECONFIG" ]] || export KUBECONFIG="$HOME/.kube/config-${PROJECT}-${ENV}"
+
 # ─── clonar repo de migraciones desde Gitea ──────────────────────────────────
 clone_migrations_repo() {
   header "Clonando repo de migraciones: $MIGRATIONS_REPO"
 
-  ssh_run bash -s <<REMOTE
-set -euo pipefail
-TMP_DIR=\$(mktemp -d)
-echo "\$TMP_DIR"
-CLONE_URL="http://${GITEA_USER}:${GITEA_PASS}@${VM_IP}:3000/${PROJECT}/${MIGRATIONS_REPO}.git"
+  local clone_url="http://${GITEA_USER}:${GITEA_PASS}@${VM_IP}:3000/${PROJECT}/${MIGRATIONS_REPO}.git"
+  local tmp_dir="/tmp/${MIGRATIONS_REPO}"
 
-if [[ -d "/tmp/${MIGRATIONS_REPO}" ]]; then
-  echo "[INFO] Actualizando repo existente..."
-  git -C "/tmp/${MIGRATIONS_REPO}" pull --rebase
-else
-  echo "[INFO] Clonando..."
-  git clone "\$CLONE_URL" "/tmp/${MIGRATIONS_REPO}"
-fi
-
-CHANGELOG="/tmp/${MIGRATIONS_REPO}/${SERVICE_SLUG}/changelog.yaml"
-if [[ ! -f "\$CHANGELOG" ]]; then
-  echo "[WARN] Changelog no encontrado: \$CHANGELOG"
-  echo "[INFO] Creando estructura inicial..."
-  mkdir -p "/tmp/${MIGRATIONS_REPO}/${SERVICE_SLUG}"
-  cat > "\$CHANGELOG" <<'EOF'
-databaseChangeLog:
-  - include:
-      file: 00001_initial_schema.yaml
-      relativeToChangelogFile: true
-EOF
-  touch "/tmp/${MIGRATIONS_REPO}/${SERVICE_SLUG}/00001_initial_schema.yaml"
-  cat > "/tmp/${MIGRATIONS_REPO}/${SERVICE_SLUG}/00001_initial_schema.yaml" <<'EOF'
-databaseChangeLog:
-  - changeSet:
-      id: 00001-init
-      author: sdlc-framework
-      comment: "Estructura inicial — completar con DDL del SDD"
-      changes: []
-EOF
-  git -C "/tmp/${MIGRATIONS_REPO}" config user.email "ci@sdlc.local"
-  git -C "/tmp/${MIGRATIONS_REPO}" config user.name  "SDLC CI"
-  git -C "/tmp/${MIGRATIONS_REPO}" add .
-  git -C "/tmp/${MIGRATIONS_REPO}" commit -m "ci: init changelog ${SERVICE_SLUG}" || true
-  git -C "/tmp/${MIGRATIONS_REPO}" push || true
-fi
-
-echo "[OK] Repo listo: /tmp/${MIGRATIONS_REPO}"
-REMOTE
+  if [[ -d "$tmp_dir/.git" ]]; then
+    info "Actualizando repo existente..."
+    git -C "$tmp_dir" pull --rebase origin main 2>/dev/null || true
+  else
+    info "Clonando..."
+    git clone "$clone_url" "$tmp_dir" 2>/dev/null || {
+      warn "No se pudo clonar desde Gitea. Usando changelogs locales en db/"
+      return 1
+    }
+  fi
+  ok "Repo listo: $tmp_dir"
 }
 
-# ─── ejecutar Liquibase como Job K8s ─────────────────────────────────────────
+# ─── ejecutar Liquibase como Job K8s via ConfigMap ────────────────────────────
 run_liquibase_job() {
   header "Ejecutando Liquibase: $SERVICE → $DB_NAME"
 
@@ -165,37 +143,49 @@ run_liquibase_job() {
     extra_args="$CHANGELOG_TAG"
   fi
 
-  local changelog_path="/migrations/${SERVICE_SLUG}/changelog.yaml"
+  local changelog_file="root.yaml"
+  local changelog_path="/liquibase/changelog/${changelog_file}"
   local pg_host="postgresql.data.svc.cluster.local"
   local jdbc_url="jdbc:postgresql://${pg_host}:5432/${DB_NAME}"
+  local configmap_name="liquibase-${SERVICE_SLUG}"
+  local job_name="liquibase-${SERVICE_SLUG}-$(date +%s)"
 
   if [[ "$DRY_RUN" == true ]]; then
     echo -e "${YELLOW}[DRY-RUN]${RESET}  Liquibase $lb_command → $DB_NAME"
     return
   fi
 
-  ssh_run bash -s <<REMOTE
-set -euo pipefail
-export KUBECONFIG=\$HOME/.kube/config
+  # Usar changelogs locales (db/<servicio>/changelog/) o clonados
+  local changelog_dir=""
+  if [[ -d "db/${SERVICE}/changelog" ]]; then
+    changelog_dir="$(pwd)/db/${SERVICE}/changelog"
+  elif [[ -d "/tmp/${MIGRATIONS_REPO}/${SERVICE}/changelog" ]]; then
+    changelog_dir="/tmp/${MIGRATIONS_REPO}/${SERVICE}/changelog"
+  elif [[ -d "/tmp/${MIGRATIONS_REPO}/${SERVICE_SLUG}/changelog" ]]; then
+    changelog_dir="/tmp/${MIGRATIONS_REPO}/${SERVICE_SLUG}/changelog"
+  else
+    die "No se encontraron changelogs para $SERVICE en db/${SERVICE}/changelog/ ni en Gitea"
+  fi
 
-JOB_NAME="liquibase-${SERVICE_SLUG}-\$(date +%s)"
+  info "Changelogs desde: $changelog_dir"
 
-kubectl apply -f - <<EOF
+  # Crear ConfigMap con los changelogs
+  kubectl create configmap "$configmap_name" \
+    --from-file="$changelog_dir" \
+    -n data --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
+
+  # Ejecutar Job de Liquibase
+  kubectl apply -f - <<EOF
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: \${JOB_NAME}
+  name: ${job_name}
   namespace: data
 spec:
-  ttlSecondsAfterFinished: 300
+  ttlSecondsAfterFinished: 120
   template:
     spec:
       restartPolicy: Never
-      volumes:
-        - name: migrations
-          hostPath:
-            path: /tmp/${MIGRATIONS_REPO}
-            type: Directory
       containers:
         - name: liquibase
           image: liquibase/liquibase:4.27
@@ -206,23 +196,27 @@ spec:
             - "--changeLogFile=${changelog_path}"
             - "--logLevel=info"
             - "${lb_command}"
-            - "${extra_args}"
           volumeMounts:
-            - name: migrations
-              mountPath: /migrations
+            - name: changelogs
+              mountPath: /liquibase/changelog
+      volumes:
+        - name: changelogs
+          configMap:
+            name: ${configmap_name}
 EOF
 
-echo "[INFO] Job creado: \${JOB_NAME} — esperando..."
-kubectl wait job/\${JOB_NAME} -n data \
-  --for=condition=complete --timeout=5m 2>/dev/null || {
-    kubectl logs -n data -l "job-name=\${JOB_NAME}" --tail=50
-    echo "[ERROR] Job de migraciones falló"
-    exit 1
-  }
+  info "Job creado: $job_name — esperando..."
+  if kubectl wait "job/${job_name}" -n data --for=condition=complete --timeout=3m 2>/dev/null; then
+    kubectl logs -n data "job/${job_name}" --tail=10 2>/dev/null
+    ok "Migraciones aplicadas: $DB_NAME"
+  else
+    warn "Job falló o timeout. Últimos logs:"
+    kubectl logs -n data "job/${job_name}" --tail=30 2>/dev/null || true
+    die "Migraciones fallaron para $SERVICE"
+  fi
 
-kubectl logs -n data -l "job-name=\${JOB_NAME}" --tail=20
-echo "[OK] Migraciones aplicadas: ${DB_NAME}"
-REMOTE
+  # Limpiar ConfigMap
+  kubectl delete configmap "$configmap_name" -n data --ignore-not-found 2>/dev/null
 }
 
 # ─── main ─────────────────────────────────────────────────────────────────────
@@ -230,7 +224,10 @@ main() {
   header "run-liquibase-migrations — service=$SERVICE  db=$DB_NAME  env=$ENV"
   [[ "$DRY_RUN" == true ]] && warn "Modo DRY-RUN activo"
 
-  [[ "$GITEA_CLONE" == true ]] && clone_migrations_repo
+  # Intentar clonar desde Gitea si se solicita; si falla, usar changelogs locales
+  if [[ "$GITEA_CLONE" == true ]]; then
+    clone_migrations_repo || warn "Usando changelogs locales en db/${SERVICE}/changelog/"
+  fi
   run_liquibase_job
 
   ok "Migraciones completadas para $SERVICE ($DB_NAME)"

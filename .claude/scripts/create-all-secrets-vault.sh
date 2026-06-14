@@ -125,6 +125,16 @@ detect_integration_service() {
      $(basename "$svc_dir") == "integration-service" ]] && echo "true" || echo "false"
 }
 
+detect_mongo_readmodel() {
+  local svc_dir="$1"
+  # Servicios con proyector MongoDB (read model CQRS): catalog, inventory, supplier
+  local svc_name
+  svc_name=$(basename "$svc_dir")
+  [[ "$svc_name" == "catalog-service" || \
+     "$svc_name" == "inventory-service" || \
+     "$svc_name" == "supplier-service" ]] && echo "true" || echo "false"
+}
+
 detect_external_systems() {
   local svc_dir="$1"
   # Extrae nombres de sistemas externos de propiedades Camel
@@ -191,6 +201,13 @@ create_service_secret() {
         "DB_PASSWORD=changeme_${svc_slug}"
         "DB_NAME=${pg_db}"
       )
+      # MongoDB read model (proyección CQRS) para catalog, inventory, supplier
+      if detect_mongo_readmodel "$svc_dir"; then
+        kvpairs+=(
+          "MONGO_READMODEL_URI=mongodb://controlstock_app:changeme_readmodel@mongodb.data.svc.cluster.local:27017/controlstock_readmodel?authSource=controlstock_readmodel"
+          "MONGO_READMODEL_DB=controlstock_readmodel"
+        )
+      fi
       ;;
     mongo)
       local mg_db="${MONGO_PREFIX}_${svc_slug}"
