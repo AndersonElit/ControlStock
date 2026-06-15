@@ -14,11 +14,14 @@
     </parent>
     <properties>
         <java.version>21</java.version>
+        <jib-maven-plugin.version>3.4.4</jib-maven-plugin.version>
+        <gitea.registry>192.168.122.230:3000</gitea.registry>
     </properties>
     <modules>
                 <module>domain/model</module>
                 <module>application/use-cases</module>
                 <module>infrastructure/driven-adapters/postgres</module>
+                <module>infrastructure/driven-adapters/keycloak</module>
                 <module>infrastructure/entry-points/rest-api</module>
                 <module>infrastructure/entry-points/app</module>
     </modules>

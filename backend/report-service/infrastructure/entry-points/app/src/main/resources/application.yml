@@ -11,9 +11,9 @@ spring:
         enabled: true
         backend: secret
   r2dbc:
-    url: ${R2DBC_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${R2DBC_URL:r2dbc:postgresql://localhost:5432/controlstock_db}
+    username: ${DB_USERNAME:controlstock_user}
+    password: ${DB_PASSWORD:changeme}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     producer:
@@ -30,3 +30,16 @@ management:
     tags:
       application: ${spring.application.name}
       environment: ${APP_ENV:dev}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_JWK_URI:http://localhost:8180/realms/controlstock/protocol/openid-connect/certs}
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/controlstock}
+
+keycloak:
+  server-url: ${KEYCLOAK_URL:http://localhost:8180}
+  realm: controlstock
+  admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
+  admin-client-secret: ${KEYCLOAK_ADMIN_SECRET:}
